@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block title %}Novo Peer · VPNHub{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{{ url_for('main.dashboard') }}">Sites</a>
+            <span>/</span>
+            <a href="{{ url_for('main.site_detail', site_id=site.id) }}">{{ site.name }}</a>
+            <span>/</span>
+            <span>Novo Peer</span>
+        </div>
+        <h1>Novo Peer</h1>
+        <p>As chaves WireGuard e a PresharedKey serão geradas automaticamente.</p>
+    </div>
+</div>
+
+<div class="form-card">
+    <form method="post" class="form-stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <label>
+            Nome
+            <input name="name"
+                   placeholder="Ex.: gateway-matriz"
+                   maxlength="160"
+                   required
+                   autofocus>
+        </label>
+
+        <label>
+            Tipo
+            <select name="peer_type">
+                <option value="gateway">Gateway do Site</option>
+                <option value="client">Dispositivo / Cliente remoto</option>
+            </select>
+            <small>
+                Gateway representa um roteador ou host que dá acesso às Networks do Site.
+            </small>
+        </label>
+
+        <div class="security-note">
+            <strong>Segurança</strong>
+            <span>
+                Será criado um keypair WireGuard e uma PresharedKey adicional.
+                A private key não será persistida no PostgreSQL.
+            </span>
+        </div>
+
+        <div class="form-actions">
+            <a class="btn btn-light"
+               href="{{ url_for('main.site_detail', site_id=site.id) }}">Cancelar</a>
+            <button class="btn btn-primary" type="submit">Gerar Peer</button>
+        </div>
+    </form>
+</div>
+
+{% endblock %}

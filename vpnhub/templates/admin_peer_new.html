@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Novo Admin Peer · VPNHub{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <span class="eyebrow">Administração</span>
+        <h1>Novo Admin Peer</h1>
+        <p>Crie um ponto de acesso administrativo para suporte aos Sites.</p>
+    </div>
+</div>
+
+<div class="form-card">
+    <form method="post" class="form-stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <label>
+            Nome
+            <input name="name"
+                   placeholder="Ex.: Notebook Suporte"
+                   maxlength="160"
+                   required
+                   autofocus>
+        </label>
+
+        <div class="security-note">
+            <strong>Segurança</strong>
+            <span>
+                O VPNHub gerará keypair + PresharedKey automaticamente.
+            </span>
+        </div>
+
+        <div class="form-actions">
+            <a class="btn btn-light" href="{{ url_for('main.dashboard') }}">Cancelar</a>
+            <button class="btn btn-primary" type="submit">Gerar Admin Peer</button>
+        </div>
+    </form>
+</div>
+
+{% endblock %}

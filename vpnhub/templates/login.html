@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>VPNHub · Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="login-page">
+<div class="login-panel">
+    <div class="login-brand">
+        <span class="brand-mark large">V</span>
+        <div>
+            <h1>VPNHub</h1>
+            <p>Central WireGuard Manager</p>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <form method="post" class="form-stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <label>
+            Usuário
+            <input name="username" autocomplete="username" required autofocus>
+        </label>
+
+        <label>
+            Senha
+            <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+
+        <button class="btn btn-primary btn-block" type="submit">
+            Entrar
+        </button>
+    </form>
+
+    <p class="login-note">
+        Administração centralizada de Sites e Peers WireGuard.
+    </p>
+</div>
+</body>
+</html>

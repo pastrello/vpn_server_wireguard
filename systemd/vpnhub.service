@@ -1,0 +1,14 @@
+[Unit]
+Description=VPNHub Portal
+After=network-online.target postgresql.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=vpnhub
+Group=vpnhub
+WorkingDirectory=/opt/vpnhub
+EnvironmentFile=/etc/vpnhub/vpnhub.env
+ExecStart=/opt/vpnhub/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:8080 run:app
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}Novo Site · VPNHub{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <span class="eyebrow">Sites</span>
+        <h1>Novo Site</h1>
+        <p>O VPNHub alocará automaticamente uma sub-rede VPN exclusiva.</p>
+    </div>
+</div>
+
+<div class="form-card">
+    <form method="post" class="form-stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <label>
+            Nome do Site
+            <input name="name"
+                   placeholder="Ex.: Cliente ACME - Matriz"
+                   maxlength="160"
+                   required
+                   autofocus>
+            <small>Use um nome que identifique claramente cliente e unidade.</small>
+        </label>
+
+        <div class="form-actions">
+            <a class="btn btn-light" href="{{ url_for('main.dashboard') }}">Cancelar</a>
+            <button class="btn btn-primary" type="submit">Criar Site</button>
+        </div>
+    </form>
+</div>
+
+{% endblock %}

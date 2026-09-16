@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}{{ site.name }} · VPNHub{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><div class="breadcrumb"><a href="{{ url_for('main.dashboard') }}">Sites</a><span>/</span><span>{{ site.name }}</span></div><h1>{{ site.name }}</h1><p>Networks e Peers exclusivos deste Site.</p></div>
+  <div class="header-actions">
+    <form method="post" action="{{ url_for('main.system_reconcile') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-light" type="submit">Reconciliar</button></form>
+    <a class="btn btn-primary" href="{{ url_for('main.peer_new', site_id=site.id) }}">Novo Peer</a>
+    <form method="post" action="{{ url_for('main.site_delete', site_id=site.id) }}" data-confirm="Excluir o Site '{{ site.name }}'? Todos os Networks e Peers deste Site também serão removidos."><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-danger" type="submit">Excluir Site</button></form>
+  </div>
+</div>
+<div class="info-strip"><div><span>Namespace VPN</span><strong>{{ site.vpn_cidr }}</strong></div><div><span>Networks</span><strong>{{ site.networks|length }}</strong></div><div><span>Peers</span><strong>{{ site.peers|length }}</strong></div><div><span>Isolamento</span><strong>Site-to-Site bloqueado</strong></div></div>
+
+<div class="two-column-layout">
+<section class="section">
+  <div class="section-heading"><div><h2>Networks</h2><p>Redes LAN alcançáveis atrás dos Gateways deste Site.</p></div></div>
+  <div class="table-card"><table><thead><tr><th>Network</th><th>Tradução</th><th class="actions-col">Ações</th></tr></thead><tbody>
+  {% for net in site.networks %}<tr><td><code class="code-inline">{{ net.cidr }}</code></td><td>{{ net.translated_cidr or '—' }}</td><td class="actions-col"><form method="post" action="{{ url_for('main.network_delete', network_id=net.id) }}" data-confirm="Excluir a Network {{ net.cidr }}?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-danger btn-sm" type="submit">Excluir</button></form></td></tr>
+  {% else %}<tr><td colspan="3"><div class="table-empty">Nenhuma Network cadastrada.</div></td></tr>{% endfor %}
+  </tbody></table></div>
+  <div class="inline-form-card"><form method="post" action="{{ url_for('main.network_new', site_id=site.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Adicionar Network<input name="cidr" placeholder="192.168.10.0/24" required></label><button class="btn btn-secondary" type="submit">Adicionar</button></form></div>
+</section>
+
+<section class="section">
+  <div class="section-heading"><div><h2>Peers</h2><p>Status real obtido do WireGuard.</p></div><a class="btn btn-light" href="{{ url_for('main.peer_new', site_id=site.id) }}">Adicionar</a></div>
+  <div class="table-card"><table><thead><tr><th>Peer</th><th>IP VPN</th><th>Status</th><th>Tráfego</th><th class="actions-col">Ações</th></tr></thead><tbody>
+  {% for peer in site.peers %}
+    <tr>
+      <td><div class="table-primary">{{ peer.name }}</div><div class="table-secondary">{% if peer.peer_type == 'gateway' %}Gateway{% else %}Dispositivo{% endif %} · {% if peer.preshared_key_enc %}PSK{% else %}sem PSK{% endif %}</div></td>
+      <td><code class="code-inline">{{ peer.assigned_ip }}</code></td>
+      <td>{% if peer_online(peer) %}<span class="badge badge-success">ONLINE</span>{% else %}<span class="badge badge-muted">OFFLINE</span>{% endif %}<div class="table-secondary">{{ handshake_age(peer) }}</div>{% if peer.endpoint %}<div class="table-secondary">{{ peer.endpoint }}</div>{% endif %}</td>
+      <td><div class="table-secondary">RX {{ format_bytes(peer.rx_bytes) }}</div><div class="table-secondary">TX {{ format_bytes(peer.tx_bytes) }}</div></td>
+      <td class="actions-col"><form method="post" action="{{ url_for('main.peer_delete', peer_id=peer.id) }}" data-confirm="Excluir o Peer '{{ peer.name }}'?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-danger btn-sm" type="submit">Excluir</button></form></td>
+    </tr>
+  {% else %}<tr><td colspan="5"><div class="table-empty">Nenhum Peer cadastrado.</div></td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+</div>
+{% endblock %}

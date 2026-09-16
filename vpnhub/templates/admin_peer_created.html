@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Admin Peer criado · VPNHub{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <span class="eyebrow">Admin Peer criado</span>
+        <h1>{{ peer.name }}</h1>
+        <p>
+            IP VPN <code class="code-inline">{{ peer.assigned_ip }}</code>
+            · PresharedKey habilitada
+        </p>
+    </div>
+    <a class="btn btn-light" href="{{ url_for('main.dashboard') }}">
+        Voltar ao Dashboard
+    </a>
+</div>
+
+{% if config %}
+<div class="created-grid">
+    <section class="form-card">
+        <div class="success-icon">✓</div>
+        <h2>Configuração pronta</h2>
+        <p>Baixe a configuração enquanto o material privado ainda está disponível.</p>
+
+        <a class="btn btn-primary btn-block"
+           href="{{ url_for('main.admin_peer_download', peer_id=peer.id) }}">
+            Baixar arquivo .conf
+        </a>
+
+        <button class="btn btn-light btn-block"
+                type="button"
+                data-copy-target="admin-config">
+            Copiar configuração
+        </button>
+    </section>
+
+    <section class="qr-card">
+        <h3>QR Code</h3>
+        <p>Importação rápida em dispositivos móveis.</p>
+        <img src="{{ url_for('main.admin_peer_qr', peer_id=peer.id) }}"
+             alt="QR Code WireGuard">
+    </section>
+</div>
+
+<section class="section">
+    <div class="section-heading">
+        <div>
+            <h2>Configuração WireGuard</h2>
+            <p>Contém material secreto.</p>
+        </div>
+    </div>
+    <pre id="admin-config" class="config-block">{{ config }}</pre>
+</section>
+{% else %}
+<div class="alert alert-warning">
+    A configuração privada temporária expirou.
+</div>
+{% endif %}
+
+{% endblock %}
