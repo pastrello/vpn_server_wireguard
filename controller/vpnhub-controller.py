@@ -951,7 +951,7 @@ def _handle_connection(conn: socket.socket, allowed_uids: set[int]):
 
         data = b""
 
-        while not data.endswith(b"\\n"):
+        while not data.endswith(b"\n"):
             chunk = conn.recv(65536)
             if not chunk:
                 break
@@ -1000,7 +1000,7 @@ def main():
         with conn:
             response = _handle_connection(conn, allowed_uids)
             conn.sendall(
-                (json.dumps(response) + "\\n").encode("utf-8")
+                (json.dumps(response) + "\n").encode("utf-8")
             )
 
 

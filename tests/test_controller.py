@@ -1,5 +1,8 @@
 import base64
 import importlib.util
+import json
+import socket
+import threading
 from pathlib import Path
 
 import pytest
@@ -110,3 +113,40 @@ def test_nftables_has_admin_and_site_isolation_rules():
     assert "ip saddr @admin_peers ip daddr @all_sites accept" in rules
     assert 'iifname "wg0" drop' in rules
     assert 'oifname "wg0" drop' in rules
+
+
+def test_socket_request_is_framed_by_real_newline(monkeypatch):
+    controller = load_controller()
+    server, client = socket.socketpair()
+    result = {}
+
+    monkeypatch.setattr(
+        controller,
+        "_peer_uid",
+        lambda _conn: 0,
+    )
+
+    def worker():
+        result["response"] = controller._handle_connection(
+            server,
+            {0},
+        )
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+
+    client.sendall(
+        (json.dumps({"action": "invalid"}) + "\n").encode("utf-8")
+    )
+
+    thread.join(timeout=1.0)
+
+    try:
+        assert not thread.is_alive(), (
+            "controller did not terminate the frame on a real newline"
+        )
+        assert result["response"]["ok"] is False
+        assert "Ação não permitida" in result["response"]["error"]
+    finally:
+        client.close()
+        server.close()
