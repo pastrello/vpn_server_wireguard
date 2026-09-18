@@ -623,3 +623,72 @@ input:focus, select:focus {
 .controller-ok .status-dot { background:#22a06b; box-shadow:0 0 0 4px rgba(34,160,107,.12); }
 .controller-warn .status-dot { background:#d79b00; box-shadow:0 0 0 4px rgba(215,155,0,.12); }
 .badge-warning { color:var(--warning); background:var(--warning-soft); }
+
+
+/* VPNHub v0.4 operational status */
+.stats-grid-six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.stats-grid-five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.stat-online { border-top: 3px solid #22a06b; }
+.stat-idle { border-top: 3px solid #d79b00; }
+.stat-offline { border-top: 3px solid #c93737; }
+.stat-never { border-top: 3px solid #98a2b3; }
+.badge-online { color: var(--success); background: var(--success-soft); }
+.badge-idle { color: var(--warning); background: var(--warning-soft); }
+.badge-offline { color: #9f2525; background: var(--danger-soft); }
+.badge-never { color: #667085; background: #f2f4f7; }
+.badge-danger { color: #9f2525; background: var(--danger-soft); }
+.peer-state-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: -5px 0 14px;
+    color: var(--muted);
+    font-size: .75rem;
+}
+.peer-state-line b { color: var(--text); }
+.health-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 22px;
+}
+.health-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+}
+.health-card span,
+.health-card small {
+    display: block;
+    color: var(--muted);
+    font-size: .74rem;
+}
+.health-card strong {
+    display: block;
+    margin: 6px 0 3px;
+    font-size: 1rem;
+}
+.status-summary { margin-top: 0; }
+.last-refresh { color: var(--muted); font-size: .78rem; }
+.table-scroll { overflow-x: auto; }
+.status-table { min-width: 1040px; }
+.action-stack {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+.action-stack form { display: inline-flex; }
+
+@media (max-width: 1280px) {
+    .stats-grid-six { grid-template-columns: repeat(3, 1fr); }
+    .stats-grid-five { grid-template-columns: repeat(3, 1fr); }
+    .health-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 720px) {
+    .stats-grid-six,
+    .stats-grid-five,
+    .health-grid { grid-template-columns: repeat(2, 1fr); }
+}

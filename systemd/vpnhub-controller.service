@@ -16,7 +16,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=full
-ReadWritePaths=/run/vpnhub /etc/wireguard /etc/sysctl.d
+ReadWritePaths=/run/vpnhub /etc/wireguard /etc/sysctl.d /etc/firewalld
 
 [Install]
 WantedBy=multi-user.target

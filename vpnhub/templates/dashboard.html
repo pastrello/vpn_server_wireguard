@@ -2,56 +2,166 @@
 {% block title %}Dashboard · VPNHub{% endblock %}
 {% block content %}
 <div class="page-header">
-  <div><span class="eyebrow">Visão geral</span><h1>Dashboard</h1><p>Estado dos Sites, Peers e do plano de dados WireGuard.</p></div>
+  <div>
+    <span class="eyebrow">Visão geral</span>
+    <h1>Dashboard</h1>
+    <p>Estado operacional dos Sites, Peers e do plano de dados WireGuard.</p>
+  </div>
   <div class="header-actions">
-    <form method="post" action="{{ url_for('main.system_reconcile') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-light" type="submit">Reconciliar</button></form>
+    <a class="btn btn-light" href="{{ url_for('main.status_page') }}">Status detalhado</a>
+    <form method="post" action="{{ url_for('main.system_reconcile') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-light" type="submit">Reconciliar</button>
+    </form>
     <a class="btn btn-secondary" href="{{ url_for('main.admin_peer_new') }}">Novo Admin Peer</a>
     <a class="btn btn-primary" href="{{ url_for('main.site_new') }}">Novo Site</a>
   </div>
 </div>
 
 <div class="controller-strip {% if controller.interface_up %}controller-ok{% else %}controller-warn{% endif %}">
-  <div><span class="status-dot"></span><strong>{% if controller.interface_up %}{{ controller.interface }} ativo{% else %}WireGuard não ativo{% endif %}</strong></div>
-  <div>{% if controller.dry_run %}<span class="badge badge-warning">DRY-RUN</span>{% elif controller.dry_run is sameas false %}<span class="badge badge-success">ATIVO</span>{% else %}<span class="badge badge-muted">Controller indisponível</span>{% endif %}</div>
+  <div>
+    <span class="status-dot"></span>
+    <strong>
+      {% if controller.interface_up %}
+        {{ controller.interface }} ativo · UDP {{ controller.listen_port or '?' }}
+      {% else %}
+        WireGuard não ativo
+      {% endif %}
+    </strong>
+  </div>
+  <div>
+    {% if controller.dry_run %}
+      <span class="badge badge-warning">DRY-RUN</span>
+    {% elif controller.dry_run is sameas false %}
+      <span class="badge badge-success">ATIVO</span>
+    {% else %}
+      <span class="badge badge-muted">Controller indisponível</span>
+    {% endif %}
+  </div>
 </div>
 
-<div class="stats-grid">
-  <div class="stat-card"><span class="stat-label">Sites</span><strong>{{ stats.sites }}</strong><small>ambientes isolados</small></div>
-  <div class="stat-card"><span class="stat-label">Networks</span><strong>{{ stats.networks }}</strong><small>redes remotas</small></div>
-  <div class="stat-card"><span class="stat-label">Peers</span><strong>{{ stats.peers }}</strong><small>gateways e dispositivos</small></div>
-  <div class="stat-card"><span class="stat-label">Admin Peers</span><strong>{{ stats.admins }}</strong><small>acessos de suporte</small></div>
+<div class="stats-grid stats-grid-six" data-live-summary data-status-endpoint="{{ url_for('main.status_data') }}">
+  <div class="stat-card">
+    <span class="stat-label">Sites</span>
+    <strong>{{ stats.sites }}</strong>
+    <small>{{ stats.networks }} Networks</small>
+  </div>
+  <div class="stat-card stat-online">
+    <span class="stat-label">Online</span>
+    <strong data-count="online">{{ stats.online }}</strong>
+    <small>handshake recente</small>
+  </div>
+  <div class="stat-card stat-idle">
+    <span class="stat-label">Idle</span>
+    <strong data-count="idle">{{ stats.idle }}</strong>
+    <small>sem handshake recente</small>
+  </div>
+  <div class="stat-card stat-offline">
+    <span class="stat-label">Offline</span>
+    <strong data-count="offline">{{ stats.offline }}</strong>
+    <small>acima do limite</small>
+  </div>
+  <div class="stat-card stat-never">
+    <span class="stat-label">Nunca conectou</span>
+    <strong data-count="never">{{ stats.never }}</strong>
+    <small>sem handshake</small>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Peers</span>
+    <strong data-count="total">{{ stats.total }}</strong>
+    <small>incluindo Admin Peers</small>
+  </div>
 </div>
 
 <section class="section">
-  <div class="section-heading"><div><h2>Sites</h2><p>Cada Site mantém seu próprio namespace e isolamento.</p></div></div>
+  <div class="section-heading">
+    <div>
+      <h2>Sites</h2>
+      <p>Cada Site mantém namespace, Networks e isolamento próprios.</p>
+    </div>
+  </div>
   <div class="site-grid">
   {% for site in sites %}
-    <article class="site-card">
-      <div class="site-card-top"><div class="site-avatar">{{ site.name[:2]|upper }}</div><div class="site-title"><h3>{{ site.name }}</h3><span class="badge badge-success">Ativo</span></div></div>
+    {% set sc = site_counts[site.id] %}
+    <article class="site-card" data-site-id="{{ site.id }}">
+      <div class="site-card-top">
+        <div class="site-avatar">{{ site.name[:2]|upper }}</div>
+        <div class="site-title">
+          <h3>{{ site.name }}</h3>
+          {% if sc.online %}
+            <span class="badge badge-success" data-site-main-state>{{ sc.online }} online</span>
+          {% elif sc.idle %}
+            <span class="badge badge-idle" data-site-main-state>{{ sc.idle }} idle</span>
+          {% elif sc.offline %}
+            <span class="badge badge-danger" data-site-main-state>offline</span>
+          {% else %}
+            <span class="badge badge-muted" data-site-main-state>sem conexão</span>
+          {% endif %}
+        </div>
+      </div>
       <div class="site-cidr">{{ site.vpn_cidr }}</div>
-      <div class="site-meta"><span><strong>{{ site.networks|length }}</strong> Networks</span><span><strong>{{ site.peers|length }}</strong> Peers</span></div>
+      <div class="peer-state-line">
+        <span><b data-site-count="online">{{ sc.online }}</b> online</span>
+        <span><b data-site-count="idle">{{ sc.idle }}</b> idle</span>
+        <span><b data-site-count="offline">{{ sc.offline }}</b> offline</span>
+        <span><b data-site-count="never">{{ sc.never }}</b> never</span>
+      </div>
+      <div class="site-meta">
+        <span><strong>{{ site.networks|length }}</strong> Networks</span>
+        <span><strong>{{ site.peers|length }}</strong> Peers</span>
+      </div>
       <a class="btn btn-light btn-block" href="{{ url_for('main.site_detail', site_id=site.id) }}">Gerenciar Site</a>
     </article>
   {% else %}
-    <div class="empty-state"><div class="empty-icon">◎</div><h3>Nenhum Site cadastrado</h3><p>Crie o primeiro Site para iniciar o gerenciamento da VPN.</p><a class="btn btn-primary" href="{{ url_for('main.site_new') }}">Criar primeiro Site</a></div>
+    <div class="empty-state">
+      <div class="empty-icon">◎</div>
+      <h3>Nenhum Site cadastrado</h3>
+      <p>Crie o primeiro Site para iniciar o gerenciamento da VPN.</p>
+      <a class="btn btn-primary" href="{{ url_for('main.site_new') }}">Criar primeiro Site</a>
+    </div>
   {% endfor %}
   </div>
 </section>
 
 <section class="section">
-  <div class="section-heading"><div><h2>Admin Peers</h2><p>Dispositivos usados para suporte e administração dos Sites.</p></div><a class="btn btn-light" href="{{ url_for('main.admin_peer_new') }}">Adicionar</a></div>
-  <div class="table-card"><table><thead><tr><th>Nome</th><th>IP VPN</th><th>Estado</th><th>Endpoint</th><th>Tráfego</th><th class="actions-col">Ações</th></tr></thead><tbody>
-  {% for peer in admins %}
-    <tr>
-      <td><div class="table-primary">{{ peer.name }}</div><div class="table-secondary">Admin Peer</div></td>
-      <td><code class="code-inline">{{ peer.assigned_ip }}</code></td>
-      <td>{% if peer_online(peer) %}<span class="badge badge-success">ONLINE</span>{% else %}<span class="badge badge-muted">OFFLINE</span>{% endif %}<div class="table-secondary">{{ handshake_age(peer) }}</div></td>
-      <td>{{ peer.endpoint or '—' }}</td>
-      <td><div class="table-secondary">RX {{ format_bytes(peer.rx_bytes) }}</div><div class="table-secondary">TX {{ format_bytes(peer.tx_bytes) }}</div></td>
-      <td class="actions-col"><form method="post" action="{{ url_for('main.admin_peer_delete', peer_id=peer.id) }}" data-confirm="Excluir o Admin Peer '{{ peer.name }}'?">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-danger btn-sm" type="submit">Excluir</button></form></td>
-    </tr>
-  {% else %}<tr><td colspan="6"><div class="table-empty">Nenhum Admin Peer cadastrado.</div></td></tr>{% endfor %}
-  </tbody></table></div>
+  <div class="section-heading">
+    <div>
+      <h2>Admin Peers</h2>
+      <p>Dispositivos usados para suporte e administração dos Sites.</p>
+    </div>
+    <a class="btn btn-light" href="{{ url_for('main.admin_peer_new') }}">Adicionar</a>
+  </div>
+  <div class="table-card table-scroll">
+    <table>
+      <thead><tr><th>Nome</th><th>IP VPN</th><th>Estado</th><th>Endpoint</th><th>Tráfego</th><th class="actions-col">Ações</th></tr></thead>
+      <tbody>
+      {% for peer in admins %}
+        {% set state = peer_state(peer) %}
+        <tr data-peer-key="{{ peer.public_key }}">
+          <td><div class="table-primary">{{ peer.name }}</div><div class="table-secondary">Admin Peer</div></td>
+          <td><code class="code-inline">{{ peer.assigned_ip }}</code></td>
+          <td>
+            <span class="badge badge-{{ state }}" data-field="state">{{ peer_state_label(state) }}</span>
+            <div class="table-secondary" data-field="handshake">{{ handshake_age(peer) }}</div>
+          </td>
+          <td data-field="endpoint">{{ peer.endpoint or '—' }}</td>
+          <td><div class="table-secondary">RX <span data-field="rx">{{ format_bytes(peer.rx_bytes) }}</span></div><div class="table-secondary">TX <span data-field="tx">{{ format_bytes(peer.tx_bytes) }}</span></div></td>
+          <td class="actions-col action-stack">
+            <form method="post" action="{{ url_for('main.admin_peer_rekey', peer_id=peer.id) }}" data-confirm="Regenerar todas as credenciais de '{{ peer.name }}'? A configuração anterior deixará de funcionar.">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-light btn-sm" type="submit">Regenerar config</button>
+            </form>
+            <form method="post" action="{{ url_for('main.admin_peer_delete', peer_id=peer.id) }}" data-confirm="Excluir o Admin Peer '{{ peer.name }}'?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-danger btn-sm" type="submit">Excluir</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6"><div class="table-empty">Nenhum Admin Peer cadastrado.</div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

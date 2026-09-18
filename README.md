@@ -1,133 +1,166 @@
-# VPNHub Portal v0.3
+# VPNHub Portal v0.4
 
-A v0.3 conecta o portal ao plano de dados real do WireGuard.
+VPNHub é um portal simples para administrar WireGuard em um servidor central e acessar Sites/clientes remotos, inclusive atrás de NAT/CGNAT.
 
-## O que entrou
+A v0.4 é a revisão de consolidação operacional do projeto.
 
-- controller privilegiado ativo;
-- `wg0` criado/gerenciado pelo controller;
-- peers sincronizados com `wg syncconf`;
-- PresharedKey aplicada também no servidor;
-- rotas de Networks gerenciadas com `proto 186`;
-- prevenção de conflito com rotas locais do servidor;
-- nftables com isolamento Site -> Site;
-- Admin Peers com acesso aos Sites;
-- leitura real de endpoint, handshake, RX e TX;
-- status ONLINE/OFFLINE no portal;
-- botão **Reconciliar**;
-- integração básica com firewalld quando ele estiver ativo.
+## Destaques
 
-## Segurança
+- Dashboard com contadores `ONLINE`, `IDLE`, `OFFLINE` e `NEVER`.
+- Página **Status** com visão de todos os Peers, endpoint, handshake, RX e TX.
+- Atualização automática de status a cada 30 segundos.
+- Health do servidor: `wg0`, porta UDP, nftables, firewalld, forwarding e rotas.
+- Reconcile automático depois do boot.
+- Um único Gateway ativo por Site.
+- Regeneração/rekey de Peers e Admin Peers pelo portal.
+- Admin Peer inclui `10.250.0.1/32` (ou o IP configurado em `WG_SERVER_ADDRESS`) em `AllowedIPs`.
+- Sync com validação prévia de nftables e rollback de WireGuard/rotas/nftables em caso de falha.
+- firewalld idempotente: reload somente quando uma configuração permanente realmente muda.
+- Migrações de schema com Flask-Migrate/Alembic.
+- Helper opcional para Caddy + HTTPS.
+- Testes básicos do controller e classificação de status.
 
-O processo web continua sem root. Ele fala com:
+## Estados de Peer
 
-```text
-/run/vpnhub/controller.sock
+Os limites são configuráveis:
+
+```ini
+WG_ONLINE_SECONDS=180
+WG_IDLE_SECONDS=600
 ```
 
-O controller aceita somente:
+Classificação padrão:
 
 ```text
-health
-status
-sync
+ONLINE   handshake <= 3 minutos
+IDLE     > 3 minutos e <= 10 minutos
+OFFLINE  > 10 minutos
+NEVER    nunca houve handshake
 ```
 
-Não existe endpoint de shell ou execução arbitrária.
-
-## Política de tráfego
+## Arquitetura
 
 ```text
-Admin Peer -> Site A/B/C         ALLOW
-Site A -> Site A                 ALLOW
-Site B -> Site B                 ALLOW
-Site A -> Site B                 DROP
-Site B -> Site A                 DROP
-Site -> host VPNHub              DROP
-Admin Peer -> host VPNHub        ALLOW
-externo -> wg0                   DROP
+Portal Flask (vpnhub)
+        |
+        | Unix socket 0660
+        v
+vpnhub-controller (root)
+        |
+        +-- WireGuard / wg0
+        +-- rotas proto 186
+        +-- nftables inet vpnhub
+        +-- firewalld (integração auxiliar)
 ```
 
-## Padrões
+O processo web não executa `wg`, `ip`, `nft` ou `firewall-cmd` como root.
+
+## Política de rede
 
 ```text
-Interface:           wg0
-Servidor VPN:        10.250.0.1/16
-Porta:               UDP 51820
-Chave privada:       /etc/wireguard/vpnhub-server.key
-Rotas gerenciadas:   proto 186
-ONLINE:              handshake <= 180s
+Admin Peer -> Sites                    ALLOW
+Site A -> Site A                       ALLOW
+Site A -> Site B                       DROP
+Site -> host VPNHub                    DROP
+Admin Peer -> host VPNHub              ALLOW
+tráfego externo não autorizado -> wg0  DROP
 ```
 
-## Upgrade da v0.2
+O isolamento é implementado diretamente em nftables. O firewalld é usado somente para integração com a política local do Rocky Linux.
 
-Faça backup:
+## Instalação limpa em Rocky Linux 9/10
 
 ```bash
-pg_dump -Fc vpnhub > /root/vpnhub-pre-v0.3.dump
-cp -a /etc/vpnhub/vpnhub.env /root/vpnhub.env.pre-v0.3
+chmod +x scripts/install-rocky.sh
+./scripts/install-rocky.sh
 ```
 
-Copie os arquivos novos para `/opt/vpnhub`, preservando `/etc/vpnhub/vpnhub.env`.
+Configure PostgreSQL e `/etc/vpnhub/vpnhub.env` e então aplique as migrações:
 
-Depois:
+```bash
+/opt/vpnhub/scripts/db-upgrade.sh
+```
+
+Crie o administrador e inicialize WireGuard em DRY-RUN:
 
 ```bash
 cd /opt/vpnhub
 source venv/bin/activate
-pip install -r requirements.txt
-
-cp systemd/vpnhub.service /etc/systemd/system/
-cp systemd/vpnhub-controller.service /etc/systemd/system/
-cp tmpfiles/vpnhub.conf /etc/tmpfiles.d/vpnhub.conf
-systemd-tmpfiles --create /etc/tmpfiles.d/vpnhub.conf
-systemctl daemon-reload
-```
-
-Inicialize a chave do servidor sem ativar alterações reais:
-
-```bash
-./scripts/bootstrap-wireguard.sh
-```
-
-Confirme no `/etc/vpnhub/vpnhub.env`:
-
-```ini
-VPN_ENDPOINT=SEU_DNS_OU_IP_PUBLICO:51820
-VPN_SERVER_PUBLIC_KEY=...
-WG_SERVER_ADDRESS=10.250.0.1/16
-WG_DRY_RUN=true
-```
-
-Carregue o ambiente e teste:
-
-```bash
 set -a
 source /etc/vpnhub/vpnhub.env
 set +a
+python scripts/create-admin.py
 
+./scripts/bootstrap-wireguard.sh
 python scripts/reconcile.py
 python scripts/status.py
 ```
 
-Quando o DRY-RUN estiver correto:
+Quando estiver correto:
 
 ```bash
 ./scripts/bootstrap-wireguard.sh --activate
 ```
 
-Depois reconcilie:
+## Upgrade da v0.3
+
+Faça backup:
 
 ```bash
-set -a
-source /etc/vpnhub/vpnhub.env
-set +a
-python scripts/reconcile.py
+pg_dump -Fc vpnhub > /root/vpnhub-pre-v0.4.dump
+cp -a /etc/vpnhub/vpnhub.env /root/vpnhub.env.pre-v0.4
 ```
 
-## Verificações no servidor
+Copie a v0.4 sobre `/opt/vpnhub`, preservando `/etc/vpnhub/vpnhub.env`, e execute:
 
 ```bash
+cd /opt/vpnhub
+./scripts/upgrade-v0.4.sh
+```
+
+O script detecta bancos v0.3 sem `alembic_version`, marca o schema atual como baseline e aplica a migração da v0.4.
+
+A migração recusa prosseguir se encontrar mais de um Gateway ativo no mesmo Site.
+
+## Reconcile no boot
+
+A ordem de inicialização é:
+
+```text
+vpnhub-controller.service
+   -> vpnhub-reconcile.service
+      -> vpnhub.service
+```
+
+Assim `wg0`, Peers, rotas e nftables são reconstruídos automaticamente após reinicialização.
+
+## Rekey / regeneração
+
+Como o VPNHub não persiste a PrivateKey do cliente, **Regenerar** cria novo keypair + PSK, mantém o mesmo IP VPN e usa os `AllowedIPs` atuais. A configuração antiga deixa de funcionar.
+
+Esse também é o método para atualizar um Admin Peer depois que novas Networks forem adicionadas.
+
+## HTTPS com Caddy
+
+Para laboratório:
+
+```ini
+PORTAL_BIND=0.0.0.0:8080
+SESSION_COOKIE_SECURE=false
+```
+
+Com Caddy já instalado:
+
+```bash
+/opt/vpnhub/scripts/configure-caddy.sh vpn.exemplo.com.br admin@exemplo.com.br
+```
+
+O helper muda o portal para `127.0.0.1:8080`, ativa cookie `Secure` e configura reverse proxy HTTPS.
+
+## Verificação operacional
+
+```bash
+systemctl status vpnhub-controller vpnhub-reconcile vpnhub
 ip addr show wg0
 wg show wg0
 ip route show proto 186
@@ -135,14 +168,15 @@ nft list table inet vpnhub
 ss -lunp | grep 51820
 ```
 
-## firewalld
+No portal, use `/status` para diagnóstico consolidado.
 
-Quando `firewalld` está ativo, o controller tenta liberar a porta WireGuard no default zone e associar `wg0` à zona `trusted`. O isolamento entre Sites continua sendo feito na tabela nftables `inet vpnhub`.
+## Testes
 
-## Conflitos de rota
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
 
-O controller recusa uma Network remota que sobreponha uma rota local do servidor. Isso evita, por exemplo, que cadastrar `192.168.1.0/24` para um cliente substitua silenciosamente uma rede local já usada pelo próprio servidor.
+## Limitação conhecida
 
-## Observação sobre Admin Peers
-
-O arquivo de um Admin Peer contém as Networks existentes no momento da criação. Quando novas Networks forem adicionadas depois, o servidor já será atualizado, mas o cliente administrativo poderá precisar de uma configuração atualizada para instalar as novas rotas. Regeneração controlada de configuração será tratada em uma próxima revisão.
+Networks sobrepostas entre Sites ainda são recusadas. A estrutura `translated_cidr` permanece reservada para uma futura etapa de NAT/virtualização.

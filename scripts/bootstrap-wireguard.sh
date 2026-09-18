@@ -32,6 +32,7 @@ set_env "WG_SERVER_PRIVATE_KEY_PATH" "${KEY_FILE}"
 grep -q '^WG_SERVER_ADDRESS=' "${ENV_FILE}" || printf '%s\n' 'WG_SERVER_ADDRESS=10.250.0.1/16' >> "${ENV_FILE}"
 grep -q '^WG_ROUTE_PROTOCOL=' "${ENV_FILE}" || printf '%s\n' 'WG_ROUTE_PROTOCOL=186' >> "${ENV_FILE}"
 grep -q '^WG_ONLINE_SECONDS=' "${ENV_FILE}" || printf '%s\n' 'WG_ONLINE_SECONDS=180' >> "${ENV_FILE}"
+grep -q '^WG_IDLE_SECONDS=' "${ENV_FILE}" || printf '%s\n' 'WG_IDLE_SECONDS=600' >> "${ENV_FILE}"
 if [[ "${ACTIVATE}" == "true" ]]; then
     set_env "WG_DRY_RUN" "false"
     echo "[OK] WG_DRY_RUN=false"
@@ -46,6 +47,8 @@ SYSCTL
 sysctl --system >/dev/null
 systemd-tmpfiles --create /etc/tmpfiles.d/vpnhub.conf 2>/dev/null || true
 systemctl daemon-reload
-systemctl restart vpnhub-controller vpnhub
+systemctl restart vpnhub-controller
+systemctl start vpnhub-reconcile || true
+systemctl restart vpnhub
 printf '\nPublicKey do servidor:\n%s\n\n' "${PUBLIC_KEY}"
 echo "Confirme VPN_ENDPOINT em ${ENV_FILE}."

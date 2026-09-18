@@ -21,6 +21,9 @@
             <a href="{{ url_for('main.dashboard') }}">
                 <span class="nav-icon">⌂</span> Dashboard
             </a>
+            <a href="{{ url_for('main.status_page') }}">
+                <span class="nav-icon">◉</span> Status
+            </a>
             <a href="{{ url_for('main.site_new') }}">
                 <span class="nav-icon">＋</span> Novo Site
             </a>
@@ -30,7 +33,7 @@
         </nav>
 
         <div class="sidebar-footer">
-            <span class="environment-badge">LAB / v0.3</span>
+            <span class="environment-badge">v0.4</span>
             <form method="post" action="{{ url_for('auth.logout') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="link-button" type="submit">Sair</button>

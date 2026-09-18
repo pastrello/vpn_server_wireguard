@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block title %}Status · VPNHub{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <span class="eyebrow">Operação</span>
+    <h1>Status</h1>
+    <p>Visão consolidada do servidor e de todos os Peers. Atualização automática a cada 30 segundos.</p>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-light" type="button" data-refresh-status>Atualizar agora</button>
+    <form method="post" action="{{ url_for('main.system_reconcile') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary" type="submit">Reconciliar</button>
+    </form>
+  </div>
+</div>
+
+<div id="live-status" data-status-endpoint="{{ url_for('main.status_data') }}" data-auto-refresh="30000">
+  {% set health = snapshot.health %}
+  <div class="health-grid">
+    <div class="health-card"><span>Controller / wg0</span><strong data-health="interface_up">{% if health.interface_up %}ONLINE{% else %}OFFLINE{% endif %}</strong><small>{{ health.interface or 'wg0' }}</small></div>
+    <div class="health-card"><span>Listen</span><strong data-health="listen_port">{% if health.listen_port %}UDP {{ health.listen_port }}{% else %}—{% endif %}</strong><small>WireGuard</small></div>
+    <div class="health-card"><span>nftables</span><strong data-health="nft_table">{% if health.nft_table %}OK{% else %}FALHA{% endif %}</strong><small>tabela inet vpnhub</small></div>
+    <div class="health-card"><span>firewalld</span><strong data-health="firewalld">{% if health.firewalld %}ATIVO{% else %}INATIVO{% endif %}</strong><small>integração auxiliar</small></div>
+    <div class="health-card"><span>IPv4 forwarding</span><strong data-health="ip_forward">{% if health.ip_forward %}ATIVO{% else %}INATIVO{% endif %}</strong><small>net.ipv4.ip_forward</small></div>
+    <div class="health-card"><span>Rotas VPNHub</span><strong data-health="route_count">{{ health.route_count or 0 }}</strong><small>proto 186</small></div>
+  </div>
+
+  <div class="stats-grid stats-grid-five status-summary">
+    <div class="stat-card"><span class="stat-label">Total</span><strong data-count="total">{{ snapshot.counts.total }}</strong><small>Peers</small></div>
+    <div class="stat-card stat-online"><span class="stat-label">Online</span><strong data-count="online">{{ snapshot.counts.online }}</strong><small>até {{ (config.WG_ONLINE_SECONDS // 60) }} min</small></div>
+    <div class="stat-card stat-idle"><span class="stat-label">Idle</span><strong data-count="idle">{{ snapshot.counts.idle }}</strong><small>até {{ (config.WG_IDLE_SECONDS // 60) }} min</small></div>
+    <div class="stat-card stat-offline"><span class="stat-label">Offline</span><strong data-count="offline">{{ snapshot.counts.offline }}</strong><small>mais de {{ (config.WG_IDLE_SECONDS // 60) }} min</small></div>
+    <div class="stat-card stat-never"><span class="stat-label">Never</span><strong data-count="never">{{ snapshot.counts.never }}</strong><small>nunca conectou</small></div>
+  </div>
+
+  <section class="section">
+    <div class="section-heading">
+      <div><h2>Peers</h2><p>Problemas aparecem primeiro: OFFLINE, NEVER, IDLE e ONLINE.</p></div>
+      <div class="last-refresh">Atualizado <span data-last-refresh>agora</span></div>
+    </div>
+    <div class="table-card table-scroll">
+      <table class="status-table">
+        <thead><tr><th>Status</th><th>Peer</th><th>Tipo</th><th>Site</th><th>IP VPN</th><th>Endpoint</th><th>Handshake</th><th>RX</th><th>TX</th></tr></thead>
+        <tbody data-status-body>
+        {% for peer in snapshot.peers %}
+          <tr data-peer-key="{{ peer.key }}">
+            <td><span class="badge badge-{{ peer.state }}" data-field="state">{{ peer.state_label }}</span></td>
+            <td><strong>{{ peer.name }}</strong></td>
+            <td>{{ peer.kind }}</td>
+            <td>{{ peer.site }}</td>
+            <td><code class="code-inline">{{ peer.assigned_ip }}</code></td>
+            <td data-field="endpoint">{{ peer.endpoint }}</td>
+            <td data-field="handshake">{{ peer.handshake }}</td>
+            <td data-field="rx">{{ peer.rx }}</td>
+            <td data-field="tx">{{ peer.tx }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="9"><div class="table-empty">Nenhum Peer cadastrado.</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

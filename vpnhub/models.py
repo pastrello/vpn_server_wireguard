@@ -57,6 +57,16 @@ class Network(db.Model):
 
 class Peer(db.Model):
     __tablename__ = "peers"
+    __table_args__ = (
+        db.Index(
+            "uq_active_gateway_per_site",
+            "site_id",
+            unique=True,
+            postgresql_where=db.text(
+                "peer_type = 'gateway' AND enabled = true"
+            ),
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     site_id = db.Column(
