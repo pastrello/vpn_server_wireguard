@@ -216,7 +216,7 @@ def _normalize_instance(raw: dict, registry: dict) -> dict:
     ]
 
     public_keys = set()
-    prefix_owners = {}
+    prefix_owners = []
 
     for peer in peers:
         if peer["public_key"] in public_keys:
@@ -226,16 +226,21 @@ def _normalize_instance(raw: dict, registry: dict) -> dict:
         public_keys.add(peer["public_key"])
 
         for prefix in peer["allowed_ips"]:
-            previous = prefix_owners.get(prefix)
-            if (
-                previous is not None
-                and previous != peer["public_key"]
-            ):
-                raise ControllerFailure(
-                    f"{interface}: AllowedIP {prefix} "
-                    "está atribuída a mais de um Peer."
-                )
-            prefix_owners[prefix] = peer["public_key"]
+            network = ipaddress.ip_network(prefix)
+
+            for previous, previous_key in prefix_owners:
+                if (
+                    previous_key != peer["public_key"]
+                    and network.overlaps(previous)
+                ):
+                    raise ControllerFailure(
+                        f"{interface}: AllowedIP {network} "
+                        f"conflita com {previous} em outro Peer."
+                    )
+
+            prefix_owners.append(
+                (network, peer["public_key"])
+            )
 
     sites = []
     for site in raw.get("sites") or []:
@@ -1526,7 +1531,7 @@ def provision_instance(payload: dict) -> dict:
         ),
         "private_key_path": (
             "/etc/wireguard/"
-            "vpnhub-placeholder.key"
+            "vpnhub-wg1.key"
         ),
         "route_protocol": DEFAULT_ROUTE_PROTOCOL,
     })

@@ -56,6 +56,8 @@ grep -q '^WG_IDLE_SECONDS=' "${ENV_FILE}" || \
     printf '%s\n' 'WG_IDLE_SECONDS=600' >> "${ENV_FILE}"
 grep -q '^CONTROLLER_ALLOWED_USER=' "${ENV_FILE}" || \
     printf '%s\n' 'CONTROLLER_ALLOWED_USER=vpnhub' >> "${ENV_FILE}"
+grep -q '^CONTROLLER_REGISTRY=' "${ENV_FILE}" || \
+    printf '%s\n' 'CONTROLLER_REGISTRY=/etc/wireguard/vpnhub-instances.json' >> "${ENV_FILE}"
 
 if [[ "${ACTIVATE}" == "true" ]]; then
     set_env "WG_DRY_RUN" "false"
