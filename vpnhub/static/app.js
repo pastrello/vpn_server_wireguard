@@ -114,6 +114,24 @@ function updateSites(sites) {
     }
 }
 
+function updateInstances(instances) {
+    for (const item of instances || []) {
+        const card = document.querySelector(
+            `[data-instance-interface="${item.interface_name}"]`
+        );
+        if (!card) continue;
+
+        const state = card.querySelector("[data-instance-state]");
+        if (state) {
+            setStatusBadge(
+                state,
+                item.interface_up ? "online" : "offline",
+                item.interface_up ? "ONLINE" : "OFFLINE",
+            );
+        }
+    }
+}
+
 function updatePeerRows(peers) {
     const rows = document.querySelectorAll("[data-peer-key]");
     const peerMap = new Map((peers || []).map((peer) => [peer.key, peer]));
@@ -168,6 +186,7 @@ async function refreshLiveStatus(endpoint) {
         updateHealth(data.health || {});
         updateCounts(data.counts || {});
         updateSites(data.sites || {});
+        updateInstances(data.instances || []);
         updatePeerRows(data.peers || []);
 
         const stamp = document.querySelector("[data-last-refresh]");

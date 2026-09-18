@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}Trunks WireGuard · VPNHub{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <span class="eyebrow">WireGuard Instances</span>
+    <h1>Trunks WireGuard</h1>
+    <p>Cada trunk possui interface, chave do servidor, porta UDP e VPN pool independentes.</p>
+  </div>
+  <div class="header-actions">
+    <a class="btn btn-primary" href="{{ url_for('main.instance_new') }}">Novo trunk</a>
+  </div>
+</div>
+
+<div class="trunk-grid">
+{% for item in instances %}
+  <article class="trunk-card" data-instance-interface="{{ item.interface_name }}">
+    <div class="trunk-head">
+      <div>
+        <span class="eyebrow">{{ item.interface_name }}</span>
+        <h2>{{ item.name }}</h2>
+      </div>
+      <span class="badge {% if item.interface_up %}badge-online{% else %}badge-offline{% endif %}" data-instance-state>
+        {% if item.interface_up %}ONLINE{% else %}OFFLINE{% endif %}
+      </span>
+    </div>
+    <dl class="trunk-meta">
+      <div><dt>VPN pool</dt><dd>{{ item.vpn_pool }}</dd></div>
+      <div><dt>Servidor</dt><dd>{{ item.server_address }}</dd></div>
+      <div><dt>UDP</dt><dd>{{ item.listen_port }}</dd></div>
+      <div><dt>Endpoint</dt><dd>{{ item.endpoint }}</dd></div>
+      <div><dt>Sites</dt><dd>{{ item.site_count }}</dd></div>
+      <div><dt>Peers</dt><dd>{{ item.peer_count }}</dd></div>
+    </dl>
+    <form method="post" action="{{ url_for('main.instance_select', instance_id=item.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-light btn-block" type="submit">Abrir {{ item.interface_name }}</button>
+    </form>
+  </article>
+{% endfor %}
+</div>
+
+<div class="security-note trunk-note">
+  <strong>Limite v0.6</strong>
+  <span>Os trunks são independentes em chave, porta e pool, mas ainda compartilham a tabela de roteamento principal. Networks LAN sobrepostas continuam bloqueadas até uma futura etapa com VRF/policy routing.</span>
+</div>
+{% endblock %}

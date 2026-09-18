@@ -64,12 +64,12 @@ systemctl daemon-reload
 systemctl enable vpnhub-controller vpnhub-reconcile vpnhub
 
 echo
-echo "VPNHub v0.5 instalado."
+echo "VPNHub v0.6 instalado."
 echo
 echo "1. Configure PostgreSQL e ${ETC_DIR}/vpnhub.env"
 echo "2. Crie/migre o schema:"
 echo "   ${APP_DIR}/scripts/db-upgrade.sh"
-echo "3. Inicialize a chave WireGuard e sincronize a Instance Principal:"
+echo "3. Inicialize a chave WireGuard e a registry de trunks:"
 echo "   ${APP_DIR}/scripts/bootstrap-wireguard.sh"
 echo "4. Crie o administrador:"
 echo "   cd ${APP_DIR}; source venv/bin/activate"

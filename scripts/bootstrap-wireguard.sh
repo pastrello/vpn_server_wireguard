@@ -99,8 +99,12 @@ with psycopg.connect(url) as conn:
 raise SystemExit(0 if exists else 1)
 PY
 then
-    "${APP_DIR}/venv/bin/python"         "${APP_DIR}/scripts/sync-default-instance.py"
+    "${APP_DIR}/venv/bin/python" \
+        "${APP_DIR}/scripts/sync-default-instance.py"
 fi
+
+"${APP_DIR}/venv/bin/python" \
+    "${APP_DIR}/scripts/bootstrap-controller-registry.py"
 
 systemctl daemon-reload
 systemctl restart vpnhub-controller

@@ -12,6 +12,59 @@ branch_labels = None
 depends_on = None
 
 
+def _drop_legacy_unique(table, constraint_name, index_name):
+    """Drop unique object whether legacy DB has constraint or unique index."""
+    bind = op.get_bind()
+
+    constraint_exists = bind.execute(
+        sa.text("""
+            SELECT 1
+              FROM pg_constraint
+             WHERE conrelid = to_regclass(:table_name)
+               AND conname = :constraint_name
+               AND contype = 'u'
+        """),
+        {
+            "table_name": f"public.{table}",
+            "constraint_name": constraint_name,
+        },
+    ).scalar()
+
+    if constraint_exists:
+        op.drop_constraint(
+            constraint_name,
+            table,
+            type_="unique",
+        )
+        return
+
+    index_unique = bind.execute(
+        sa.text("""
+            SELECT i.indisunique
+              FROM pg_class t
+              JOIN pg_namespace n
+                ON n.oid = t.relnamespace
+              JOIN pg_index i
+                ON i.indrelid = t.oid
+              JOIN pg_class x
+                ON x.oid = i.indexrelid
+             WHERE n.nspname = 'public'
+               AND t.relname = :table_name
+               AND x.relname = :index_name
+        """),
+        {
+            "table_name": table,
+            "index_name": index_name,
+        },
+    ).scalar()
+
+    if index_unique:
+        op.drop_index(
+            index_name,
+            table_name=table,
+        )
+
+
 def upgrade():
     op.create_table(
         "vpn_instances",
@@ -80,8 +133,16 @@ def upgrade():
     )
 
     # Global uniqueness from the single-wg model becomes per Instance.
-    op.drop_constraint("sites_name_key", "sites", type_="unique")
-    op.drop_constraint("sites_vpn_cidr_key", "sites", type_="unique")
+    _drop_legacy_unique(
+        "sites",
+        "sites_name_key",
+        "ix_sites_name",
+    )
+    _drop_legacy_unique(
+        "sites",
+        "sites_vpn_cidr_key",
+        "ix_sites_vpn_cidr",
+    )
     op.create_unique_constraint(
         "uq_site_name_per_instance",
         "sites",
@@ -117,10 +178,10 @@ def upgrade():
         ["vpn_instance_id"],
     )
 
-    op.drop_constraint(
-        "admin_peers_assigned_ip_key",
+    _drop_legacy_unique(
         "admin_peers",
-        type_="unique",
+        "admin_peers_assigned_ip_key",
+        "ix_admin_peers_assigned_ip",
     )
     op.create_unique_constraint(
         "uq_admin_peer_ip_per_instance",
@@ -128,10 +189,10 @@ def upgrade():
         ["vpn_instance_id", "assigned_ip"],
     )
 
-    op.drop_constraint(
-        "peers_assigned_ip_key",
+    _drop_legacy_unique(
         "peers",
-        type_="unique",
+        "peers_assigned_ip_key",
+        "ix_peers_assigned_ip",
     )
     op.create_unique_constraint(
         "uq_peer_ip_per_site",

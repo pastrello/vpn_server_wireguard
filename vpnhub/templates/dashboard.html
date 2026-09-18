@@ -3,29 +3,45 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <span class="eyebrow">Visão geral</span>
-    <h1>Dashboard</h1>
-    <p>Estado operacional dos Sites, Peers e do plano de dados WireGuard.</p>
+    <span class="eyebrow">Trunk ativo</span>
+    <h1>{{ instance.name }}</h1>
+    <p>{{ instance.interface_name }} · {{ instance.vpn_pool }} · UDP {{ instance.listen_port }} · {{ instance.endpoint }}</p>
   </div>
   <div class="header-actions">
-    <a class="btn btn-light" href="{{ url_for('main.status_page') }}">Status detalhado</a>
+    <a class="btn btn-light" href="{{ url_for('main.instance_list') }}">Trocar trunk</a>
+    <a class="btn btn-light" href="{{ url_for('main.status_page') }}">Status geral</a>
     <form method="post" action="{{ url_for('main.system_reconcile') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn btn-light" type="submit">Reconciliar</button>
+      <button class="btn btn-light" type="submit">Reconciliar tudo</button>
     </form>
     <a class="btn btn-secondary" href="{{ url_for('main.admin_peer_new') }}">Novo Admin Peer</a>
     <a class="btn btn-primary" href="{{ url_for('main.site_new') }}">Novo Site</a>
   </div>
 </div>
 
+<div class="instance-switcher">
+  {% for item in instances %}
+    <form method="post" action="{{ url_for('main.instance_select', instance_id=item.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="instance-chip {% if item.id == instance.id %}active{% endif %}" type="submit">
+        <span class="status-dot {% if item.enabled %}dot-enabled{% endif %}"></span>
+        {{ item.interface_name }} · {{ item.name }}
+      </button>
+    </form>
+  {% endfor %}
+  <a class="instance-chip add" href="{{ url_for('main.instance_new') }}">＋ novo trunk</a>
+</div>
+
 <div class="controller-strip {% if controller.interface_up %}controller-ok{% else %}controller-warn{% endif %}">
   <div>
     <span class="status-dot"></span>
     <strong>
-      {% if controller.interface_up %}
-        {{ instance.name }} · {{ instance.interface_name }} · {{ instance.vpn_pool }} · UDP {{ instance.listen_port }}
+      {% if not instance.enabled %}
+        {{ instance.interface_name }} desabilitado
+      {% elif controller.interface_up %}
+        {{ instance.interface_name }} ativo · UDP {{ controller.listen_port or instance.listen_port }}
       {% else %}
-        WireGuard não ativo
+        {{ instance.interface_name }} não ativo no kernel
       {% endif %}
     </strong>
   </div>
@@ -40,45 +56,20 @@
   </div>
 </div>
 
-<div class="stats-grid stats-grid-six" data-live-summary data-status-endpoint="{{ url_for('main.status_data') }}">
-  <div class="stat-card">
-    <span class="stat-label">Sites</span>
-    <strong>{{ stats.sites }}</strong>
-    <small>{{ stats.networks }} Networks</small>
-  </div>
-  <div class="stat-card stat-online">
-    <span class="stat-label">Online</span>
-    <strong data-count="online">{{ stats.online }}</strong>
-    <small>handshake recente</small>
-  </div>
-  <div class="stat-card stat-idle">
-    <span class="stat-label">Idle</span>
-    <strong data-count="idle">{{ stats.idle }}</strong>
-    <small>sem handshake recente</small>
-  </div>
-  <div class="stat-card stat-offline">
-    <span class="stat-label">Offline</span>
-    <strong data-count="offline">{{ stats.offline }}</strong>
-    <small>acima do limite</small>
-  </div>
-  <div class="stat-card stat-never">
-    <span class="stat-label">Nunca conectou</span>
-    <strong data-count="never">{{ stats.never }}</strong>
-    <small>sem handshake</small>
-  </div>
-  <div class="stat-card">
-    <span class="stat-label">Peers</span>
-    <strong data-count="total">{{ stats.total }}</strong>
-    <small>incluindo Admin Peers</small>
-  </div>
+<div class="stats-grid stats-grid-six"
+     data-live-summary
+     data-status-endpoint="{{ url_for('main.status_data', instance_id=instance.id) }}">
+  <div class="stat-card"><span class="stat-label">Sites</span><strong>{{ stats.sites }}</strong><small>{{ stats.networks }} Networks</small></div>
+  <div class="stat-card stat-online"><span class="stat-label">Online</span><strong data-count="online">{{ stats.online }}</strong><small>handshake recente</small></div>
+  <div class="stat-card stat-idle"><span class="stat-label">Idle</span><strong data-count="idle">{{ stats.idle }}</strong><small>sem handshake recente</small></div>
+  <div class="stat-card stat-offline"><span class="stat-label">Offline</span><strong data-count="offline">{{ stats.offline }}</strong><small>acima do limite</small></div>
+  <div class="stat-card stat-never"><span class="stat-label">Nunca conectou</span><strong data-count="never">{{ stats.never }}</strong><small>sem handshake</small></div>
+  <div class="stat-card"><span class="stat-label">Peers</span><strong data-count="total">{{ stats.total }}</strong><small>incluindo Admin Peers</small></div>
 </div>
 
 <section class="section">
   <div class="section-heading">
-    <div>
-      <h2>Sites</h2>
-      <p>Cada Site mantém namespace, Networks e isolamento próprios.</p>
-    </div>
+    <div><h2>Sites</h2><p>Sites pertencentes exclusivamente a {{ instance.interface_name }}.</p></div>
   </div>
   <div class="site-grid">
   {% for site in sites %}
@@ -115,8 +106,8 @@
   {% else %}
     <div class="empty-state">
       <div class="empty-icon">◎</div>
-      <h3>Nenhum Site cadastrado</h3>
-      <p>Crie o primeiro Site para iniciar o gerenciamento da VPN.</p>
+      <h3>Nenhum Site neste trunk</h3>
+      <p>{{ instance.interface_name }} já está pronto para receber seu primeiro Site.</p>
       <a class="btn btn-primary" href="{{ url_for('main.site_new') }}">Criar primeiro Site</a>
     </div>
   {% endfor %}
@@ -125,10 +116,7 @@
 
 <section class="section">
   <div class="section-heading">
-    <div>
-      <h2>Admin Peers</h2>
-      <p>Dispositivos usados para suporte e administração dos Sites.</p>
-    </div>
+    <div><h2>Admin Peers</h2><p>Acesso administrativo exclusivo a Sites deste trunk.</p></div>
     <a class="btn btn-light" href="{{ url_for('main.admin_peer_new') }}">Adicionar</a>
   </div>
   <div class="table-card table-scroll">
@@ -138,27 +126,22 @@
       {% for peer in admins %}
         {% set state = peer_state(peer) %}
         <tr data-peer-key="{{ peer.public_key }}">
-          <td><div class="table-primary">{{ peer.name }}</div><div class="table-secondary">Admin Peer</div></td>
+          <td><div class="table-primary">{{ peer.name }}</div><div class="table-secondary">Admin Peer · {{ instance.interface_name }}</div></td>
           <td><code class="code-inline">{{ peer.assigned_ip }}</code></td>
-          <td>
-            <span class="badge badge-{{ state }}" data-field="state">{{ peer_state_label(state) }}</span>
-            <div class="table-secondary" data-field="handshake">{{ handshake_age(peer) }}</div>
-          </td>
+          <td><span class="badge badge-{{ state }}" data-field="state">{{ peer_state_label(state) }}</span><div class="table-secondary" data-field="handshake">{{ handshake_age(peer) }}</div></td>
           <td data-field="endpoint">{{ peer.endpoint or '—' }}</td>
           <td><div class="table-secondary">RX <span data-field="rx">{{ format_bytes(peer.rx_bytes) }}</span></div><div class="table-secondary">TX <span data-field="tx">{{ format_bytes(peer.tx_bytes) }}</span></div></td>
           <td class="actions-col action-stack">
-            <form method="post" action="{{ url_for('main.admin_peer_rekey', peer_id=peer.id) }}" data-confirm="Regenerar todas as credenciais de '{{ peer.name }}'? A configuração anterior deixará de funcionar.">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button class="btn btn-light btn-sm" type="submit">Regenerar config</button>
+            <form method="post" action="{{ url_for('main.admin_peer_rekey', peer_id=peer.id) }}" data-confirm="Regenerar todas as credenciais de '{{ peer.name }}'?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-light btn-sm" type="submit">Regenerar config</button>
             </form>
             <form method="post" action="{{ url_for('main.admin_peer_delete', peer_id=peer.id) }}" data-confirm="Excluir o Admin Peer '{{ peer.name }}'?">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button class="btn btn-danger btn-sm" type="submit">Excluir</button>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-danger btn-sm" type="submit">Excluir</button>
             </form>
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="6"><div class="table-empty">Nenhum Admin Peer cadastrado.</div></td></tr>
+        <tr><td colspan="6"><div class="table-empty">Nenhum Admin Peer neste trunk.</div></td></tr>
       {% endfor %}
       </tbody>
     </table>

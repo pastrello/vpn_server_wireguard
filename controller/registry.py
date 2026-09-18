@@ -126,10 +126,34 @@ def normalize_record(raw: dict) -> dict:
     private_key_path = str(
         raw.get("private_key_path") or ""
     ).strip()
-    if not private_key_path.startswith("/etc/wireguard/"):
+    key_path = Path(private_key_path)
+    key_root = Path("/etc/wireguard")
+
+    try:
+        resolved = key_path.resolve(strict=False)
+    except OSError as exc:
         raise RegistryError(
-            "PrivateKey precisa ficar sob /etc/wireguard."
+            "Caminho da PrivateKey inválido."
+        ) from exc
+
+    valid_name = (
+        resolved.name == "vpnhub-server.key"
+        or re.fullmatch(
+            r"vpnhub-wg[0-9]+\.key",
+            resolved.name,
         )
+    )
+
+    if (
+        resolved.parent != key_root
+        or not valid_name
+    ):
+        raise RegistryError(
+            "PrivateKey precisa usar um nome VPNHub "
+            "diretamente em /etc/wireguard."
+        )
+
+    private_key_path = str(resolved)
 
     route_protocol = int(raw.get("route_protocol") or 186)
     if not 1 <= route_protocol <= 255:

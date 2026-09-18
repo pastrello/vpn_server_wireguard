@@ -833,3 +833,109 @@ html[data-theme="dark"] .login-page {
         flex-direction: column;
     }
 }
+
+
+/* VPNHub v0.6: multiple WireGuard trunks */
+.instance-switcher {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: -8px 0 18px;
+}
+.instance-switcher form { margin: 0; }
+.instance-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 36px;
+    padding: 7px 11px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--muted);
+    font: inherit;
+    font-size: .78rem;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+.instance-chip:hover,
+.instance-chip.active {
+    color: var(--text);
+    border-color: var(--primary);
+}
+.instance-chip.active {
+    box-shadow: 0 0 0 3px rgba(36, 87, 214, .08);
+}
+.instance-chip.add {
+    color: var(--primary);
+}
+.dot-enabled { background: #22a06b; }
+
+.trunk-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+.trunk-grid.compact {
+    margin-bottom: 18px;
+}
+.trunk-card {
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+.trunk-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+}
+.trunk-head h2,
+.trunk-head h3 {
+    margin: 3px 0 0;
+}
+.trunk-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0 0 16px;
+}
+.trunk-meta div {
+    min-width: 0;
+}
+.trunk-meta dt {
+    color: var(--muted);
+    font-size: .69rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.trunk-meta dd {
+    margin: 4px 0 0;
+    overflow-wrap: anywhere;
+    font-size: .83rem;
+    font-weight: 700;
+}
+.trunk-note {
+    margin-top: 8px;
+}
+
+html[data-theme="dark"] .instance-chip {
+    background: var(--surface);
+}
+html[data-theme="dark"] .instance-chip.active {
+    box-shadow: 0 0 0 3px rgba(110, 160, 255, .12);
+}
+
+@media (max-width: 1100px) {
+    .trunk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+    .trunk-grid { grid-template-columns: 1fr; }
+    .trunk-meta { grid-template-columns: 1fr 1fr; }
+}
