@@ -37,10 +37,10 @@ jobs:
 
       - name: Run tests
         env:
-          DATABASE_URL: sqlite:///:memory:
-          SECRET_KEY: ci-secret-key
-          PSK_ENCRYPTION_KEY: 4piYv6j6VlaOlouohzC30YNleA-f3OiiUYZ8S7hfxlA=
-          VPN_ENDPOINT: vpn.example.com:51820
-          VPN_SERVER_PUBLIC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          DATABASE_URL: "sqlite:///:memory:"
+          SECRET_KEY: "ci-secret-key"
+          PSK_ENCRYPTION_KEY: "4piYv6j6VlaOlouohzC30YNleA-f3OiiUYZ8S7hfxlA="
+          VPN_ENDPOINT: "vpn.example.com:51820"
+          VPN_SERVER_PUBLIC_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
           WG_DRY_RUN: "true"
         run: pytest -q
