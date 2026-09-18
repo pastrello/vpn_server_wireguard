@@ -16,6 +16,7 @@ if str(CONTROLLER_DIR) not in sys.path:
 
 from registry import (  # noqa: E402
     RegistryError,
+    ensure_private_key,
     load_registry,
     save_registry,
     validate_registry,
@@ -31,6 +32,29 @@ REGISTRY_PATH = Path(
 
 def main():
     interface = os.getenv("WG_INTERFACE", "wg0")
+    private_key_path = os.getenv(
+        "WG_SERVER_PRIVATE_KEY_PATH",
+        "/etc/wireguard/vpnhub-server.key",
+    )
+    derived_public_key = ensure_private_key(
+        private_key_path
+    )
+    configured_public_key = os.getenv(
+        "VPN_SERVER_PUBLIC_KEY",
+        "",
+    ).strip()
+
+    if (
+        configured_public_key
+        and configured_public_key != "CHANGE_ME"
+        and not configured_public_key.startswith("COLOQUE_")
+        and configured_public_key != derived_public_key
+    ):
+        raise RegistryError(
+            "VPN_SERVER_PUBLIC_KEY não corresponde à "
+            "PrivateKey configurada para a Instance padrão."
+        )
+
     record = {
         "interface": interface,
         "listen_port": int(
@@ -44,10 +68,8 @@ def main():
             "WG_SERVER_ADDRESS",
             "10.250.0.1/16",
         ),
-        "private_key_path": os.getenv(
-            "WG_SERVER_PRIVATE_KEY_PATH",
-            "/etc/wireguard/vpnhub-server.key",
-        ),
+        "private_key_path": private_key_path,
+        "public_key": derived_public_key,
         "route_protocol": int(
             os.getenv("WG_ROUTE_PROTOCOL", "186")
         ),
@@ -72,6 +94,7 @@ def main():
                 "vpn_pool",
                 "server_address",
                 "private_key_path",
+                "public_key",
                 "route_protocol",
             )
         }

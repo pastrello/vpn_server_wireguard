@@ -47,6 +47,7 @@ def registry_data():
                     "/etc/wireguard/"
                     "vpnhub-server.key"
                 ),
+                "public_key": key(90),
                 "route_protocol": 186,
             },
             "wg1": {
@@ -58,6 +59,7 @@ def registry_data():
                     "/etc/wireguard/"
                     "vpnhub-wg1.key"
                 ),
+                "public_key": key(91),
                 "route_protocol": 186,
             },
         },
@@ -88,6 +90,9 @@ def instance_state(
         "vpn_pool": registry["vpn_pool"],
         "private_key_path": registry[
             "private_key_path"
+        ],
+        "server_public_key": registry[
+            "public_key"
         ],
         "route_protocol": 186,
         "peers": [{
@@ -228,6 +233,27 @@ def test_validate_state_rejects_runtime_tampering(
     payload["instances"][1][
         "private_key_path"
     ] = "/etc/wireguard/vpnhub-wg9.key"
+
+    with pytest.raises(
+        controller.ControllerFailure
+    ):
+        controller.validate_state(payload)
+
+
+def test_validate_state_rejects_server_public_key_tampering(
+    monkeypatch,
+    tmp_path,
+):
+    controller = load_controller()
+    configure_registry(
+        controller,
+        monkeypatch,
+        tmp_path,
+    )
+    payload = base_state()
+    payload["instances"][1][
+        "server_public_key"
+    ] = key(99)
 
     with pytest.raises(
         controller.ControllerFailure

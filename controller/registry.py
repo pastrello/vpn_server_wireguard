@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import ipaddress
 import json
 import os
@@ -155,6 +156,24 @@ def normalize_record(raw: dict) -> dict:
 
     private_key_path = str(resolved)
 
+    public_key = str(
+        raw.get("public_key") or ""
+    ).strip()
+    try:
+        decoded_key = base64.b64decode(
+            public_key,
+            validate=True,
+        )
+    except Exception as exc:
+        raise RegistryError(
+            "PublicKey do servidor inválida."
+        ) from exc
+
+    if len(decoded_key) != 32:
+        raise RegistryError(
+            "PublicKey do servidor deve representar 32 bytes."
+        )
+
     route_protocol = int(raw.get("route_protocol") or 186)
     if not 1 <= route_protocol <= 255:
         raise RegistryError("Routing protocol inválido.")
@@ -165,6 +184,7 @@ def normalize_record(raw: dict) -> dict:
         "vpn_pool": str(vpn_pool),
         "server_address": str(server_address),
         "private_key_path": private_key_path,
+        "public_key": public_key,
         "route_protocol": route_protocol,
     }
 

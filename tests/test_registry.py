@@ -35,6 +35,9 @@ def record(interface, port, pool):
             if interface == "wg0"
             else f"/etc/wireguard/vpnhub-{interface}.key"
         ),
+        "public_key": (
+            "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlo="
+        ),
         "route_protocol": 186,
     }
 

@@ -115,6 +115,7 @@ def _instance_state(instance: VPNInstance) -> dict:
         "listen_port": instance.listen_port,
         "server_address": instance.server_address,
         "private_key_path": instance.private_key_path,
+        "server_public_key": instance.server_public_key,
         "route_protocol": instance.route_protocol,
         "vpn_pool": instance.vpn_pool,
         "peers": peers,

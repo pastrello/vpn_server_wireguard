@@ -192,6 +192,9 @@ def _normalize_instance(raw: dict, registry: dict) -> dict:
         "private_key_path": str(
             raw.get("private_key_path") or ""
         ),
+        "public_key": str(
+            raw.get("server_public_key") or ""
+        ).strip(),
         "route_protocol": int(
             raw.get("route_protocol") or 0
         ),
@@ -202,6 +205,7 @@ def _normalize_instance(raw: dict, registry: dict) -> dict:
         "vpn_pool",
         "server_address",
         "private_key_path",
+        "public_key",
         "route_protocol",
     ):
         _require_equal(
@@ -1520,21 +1524,40 @@ def _validate_new_pool(
 def provision_instance(payload: dict) -> dict:
     registry = _registry()
 
-    requested = normalize_record({
-        "interface": "wg1",
-        "listen_port": payload.get(
-            "listen_port"
-        ),
-        "vpn_pool": payload.get("vpn_pool"),
-        "server_address": payload.get(
-            "server_address"
-        ),
-        "private_key_path": (
-            "/etc/wireguard/"
-            "vpnhub-wg1.key"
-        ),
-        "route_protocol": DEFAULT_ROUTE_PROTOCOL,
-    })
+    try:
+        listen_port = int(
+            payload.get("listen_port") or 0
+        )
+        if not 1 <= listen_port <= 65535:
+            raise ValueError
+
+        vpn_pool = ipaddress.ip_network(
+            str(payload.get("vpn_pool") or ""),
+            strict=False,
+        )
+        server_address = ipaddress.ip_interface(
+            str(payload.get("server_address") or "")
+        )
+    except ValueError as exc:
+        raise ControllerFailure(
+            "Parâmetros do novo trunk são inválidos."
+        ) from exc
+
+    if (
+        vpn_pool.version != 4
+        or server_address.version != 4
+        or vpn_pool.prefixlen > 24
+        or server_address.ip not in vpn_pool
+    ):
+        raise ControllerFailure(
+            "VPN pool/endereço do novo trunk são inválidos."
+        )
+
+    requested = {
+        "listen_port": listen_port,
+        "vpn_pool": str(vpn_pool),
+        "server_address": str(server_address),
+    }
 
     existing = _existing_matching_instance(
         registry,
@@ -1545,11 +1568,15 @@ def provision_instance(payload: dict) -> dict:
         public_key = ensure_private_key(
             existing["private_key_path"]
         )
+        if public_key != existing["public_key"]:
+            raise ControllerFailure(
+                f"A chave privada de {existing['interface']} "
+                "não corresponde à PublicKey da registry."
+            )
         return {
             "ok": True,
             "created": False,
             **existing,
-            "public_key": public_key,
         }
 
     _validate_new_pool(
@@ -1561,14 +1588,15 @@ def provision_instance(payload: dict) -> dict:
     key_path = (
         f"/etc/wireguard/vpnhub-{interface}.key"
     )
+    public_key = ensure_private_key(key_path)
 
     record = normalize_record({
-        **requested,
         "interface": interface,
+        **requested,
         "private_key_path": key_path,
+        "public_key": public_key,
+        "route_protocol": DEFAULT_ROUTE_PROTOCOL,
     })
-
-    public_key = ensure_private_key(key_path)
 
     registry["instances"][interface] = record
     registry = validate_registry(registry)
@@ -1581,7 +1609,6 @@ def provision_instance(payload: dict) -> dict:
         "ok": True,
         "created": True,
         **record,
-        "public_key": public_key,
     }
 
 
