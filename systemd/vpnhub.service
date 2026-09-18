@@ -1,7 +1,7 @@
 [Unit]
 Description=VPNHub Portal
 After=network-online.target postgresql.service vpnhub-controller.service vpnhub-reconcile.service
-Wants=network-online.target vpnhub-controller.service
+Wants=network-online.target vpnhub-controller.service vpnhub-reconcile.service
 
 [Service]
 Type=simple
@@ -12,11 +12,12 @@ EnvironmentFile=/etc/vpnhub/vpnhub.env
 ExecStart=/opt/vpnhub/scripts/run-gunicorn.sh
 Restart=on-failure
 RestartSec=3
+UMask=0077
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=strict
-ReadWritePaths=/run/vpnhub
+ReadWritePaths=/run/vpnhub/secrets
 
 [Install]
 WantedBy=multi-user.target

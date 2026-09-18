@@ -18,6 +18,18 @@
 
 <div id="live-status" data-status-endpoint="{{ url_for('main.status_data') }}" data-auto-refresh="30000">
   {% set health = snapshot.health %}
+  <div class="instance-banner">
+    <div>
+      <span class="eyebrow">VPN Instance</span>
+      <strong>{{ snapshot.instance.name }}</strong>
+    </div>
+    <div class="instance-meta">
+      <code>{{ snapshot.instance.interface_name }}</code>
+      <span>{{ snapshot.instance.vpn_pool }}</span>
+      <span>UDP {{ snapshot.instance.listen_port }}</span>
+      <span>{{ snapshot.instance.endpoint }}</span>
+    </div>
+  </div>
   <div class="health-grid">
     <div class="health-card"><span>Controller / wg0</span><strong data-health="interface_up">{% if health.interface_up %}ONLINE{% else %}OFFLINE{% endif %}</strong><small>{{ health.interface or 'wg0' }}</small></div>
     <div class="health-card"><span>Listen</span><strong data-health="listen_port">{% if health.listen_port %}UDP {{ health.listen_port }}{% else %}—{% endif %}</strong><small>WireGuard</small></div>

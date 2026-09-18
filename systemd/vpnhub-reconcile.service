@@ -12,6 +12,7 @@ WorkingDirectory=/opt/vpnhub
 EnvironmentFile=/etc/vpnhub/vpnhub.env
 ExecStart=/opt/vpnhub/venv/bin/python /opt/vpnhub/scripts/reconcile.py
 TimeoutStartSec=30
+UMask=0077
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes

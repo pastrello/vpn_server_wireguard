@@ -4,6 +4,11 @@ from flask import current_app
 
 from .controller_client import ControllerError, controller_request
 from .crypto import decrypt_psk
+from .instances import (
+    assert_matches_runtime,
+    assert_single_runtime_instance,
+    default_instance,
+)
 from .models import AdminPeer, Peer, Site, db
 
 STATE_ORDER = {
@@ -23,30 +28,47 @@ STATE_LABELS = {
 
 def _peer_allowed_ips(peer: Peer) -> list[str]:
     allowed = [peer.assigned_ip]
+
     if peer.peer_type == "gateway":
         allowed.extend(
-            net.translated_cidr or net.cidr
-            for net in peer.site.networks
+            network.translated_cidr or network.cidr
+            for network in peer.site.networks
         )
+
     return allowed
 
 
 def desired_state() -> dict:
+    instance = default_instance()
+    assert_single_runtime_instance(instance)
+    assert_matches_runtime(instance)
+
     sites = (
         Site.query
-        .filter_by(enabled=True)
+        .filter_by(
+            enabled=True,
+            vpn_instance_id=instance.id,
+        )
         .order_by(Site.id)
         .all()
     )
 
+    site_ids = [site.id for site in sites]
     peers = []
 
-    for peer in (
+    site_peers = (
         Peer.query
-        .filter_by(enabled=True)
+        .filter(
+            Peer.enabled.is_(True),
+            Peer.site_id.in_(site_ids),
+        )
         .order_by(Peer.id)
         .all()
-    ):
+        if site_ids
+        else []
+    )
+
+    for peer in site_peers:
         peers.append({
             "kind": "site",
             "site_id": peer.site_id,
@@ -56,12 +78,17 @@ def desired_state() -> dict:
             "allowed_ips": _peer_allowed_ips(peer),
         })
 
-    for peer in (
+    admin_peers = (
         AdminPeer.query
-        .filter_by(enabled=True)
+        .filter_by(
+            enabled=True,
+            vpn_instance_id=instance.id,
+        )
         .order_by(AdminPeer.id)
         .all()
-    ):
+    )
+
+    for peer in admin_peers:
         peers.append({
             "kind": "admin",
             "site_id": None,
@@ -77,8 +104,8 @@ def desired_state() -> dict:
     for site in sites:
         ranges = [site.vpn_cidr]
 
-        for net in site.networks:
-            target = net.translated_cidr or net.cidr
+        for network in site.networks:
+            target = network.translated_cidr or network.cidr
             ranges.append(target)
             routes.append(target)
 
@@ -89,19 +116,19 @@ def desired_state() -> dict:
         })
 
     return {
-        "interface": current_app.config["WG_INTERFACE"],
-        "listen_port": current_app.config["WG_LISTEN_PORT"],
-        "server_address": current_app.config["WG_SERVER_ADDRESS"],
-        "private_key_path": current_app.config[
-            "WG_SERVER_PRIVATE_KEY_PATH"
-        ],
-        "route_protocol": current_app.config["WG_ROUTE_PROTOCOL"],
-        "vpn_pool": current_app.config["VPN_ADDRESS_POOL"],
+        "instance_id": instance.id,
+        "instance_name": instance.name,
+        "interface": instance.interface_name,
+        "listen_port": instance.listen_port,
+        "server_address": instance.server_address,
+        "private_key_path": instance.private_key_path,
+        "route_protocol": instance.route_protocol,
+        "vpn_pool": instance.vpn_pool,
         "peers": peers,
         "sites": site_defs,
         "admin_addresses": [
-            p.assigned_ip
-            for p in AdminPeer.query.filter_by(enabled=True).all()
+            peer.assigned_ip
+            for peer in admin_peers
         ],
         "routes": sorted(set(routes)),
     }
@@ -143,25 +170,41 @@ def refresh_status() -> dict:
     by_key = response.get("peers", {})
     changed = False
 
-    for model in (Peer, AdminPeer):
-        for peer in model.query.all():
-            state = by_key.get(peer.public_key)
-            if not state:
-                continue
+    instance = default_instance()
+    sites = Site.query.filter_by(
+        vpn_instance_id=instance.id
+    ).all()
+    site_ids = [site.id for site in sites]
 
-            epoch = int(state.get("latest_handshake") or 0)
-            peer.latest_handshake = (
-                datetime.fromtimestamp(
-                    epoch,
-                    tz=timezone.utc,
-                ).replace(tzinfo=None)
-                if epoch
-                else None
-            )
-            peer.endpoint = state.get("endpoint") or None
-            peer.rx_bytes = int(state.get("rx_bytes") or 0)
-            peer.tx_bytes = int(state.get("tx_bytes") or 0)
-            changed = True
+    tracked_peers = (
+        Peer.query.filter(Peer.site_id.in_(site_ids)).all()
+        if site_ids
+        else []
+    )
+    tracked_peers.extend(
+        AdminPeer.query.filter_by(
+            vpn_instance_id=instance.id
+        ).all()
+    )
+
+    for peer in tracked_peers:
+        state = by_key.get(peer.public_key)
+        if not state:
+            continue
+
+        epoch = int(state.get("latest_handshake") or 0)
+        peer.latest_handshake = (
+            datetime.fromtimestamp(
+                epoch,
+                tz=timezone.utc,
+            ).replace(tzinfo=None)
+            if epoch
+            else None
+        )
+        peer.endpoint = state.get("endpoint") or None
+        peer.rx_bytes = int(state.get("rx_bytes") or 0)
+        peer.tx_bytes = int(state.get("tx_bytes") or 0)
+        changed = True
 
     if changed:
         db.session.commit()
@@ -249,10 +292,25 @@ def site_status_counts(site) -> dict:
 def status_snapshot() -> dict:
     refresh_status()
     health = controller_health()
+    instance = default_instance()
 
     rows = []
 
-    for peer in Peer.query.all():
+    sites = (
+        Site.query
+        .filter_by(vpn_instance_id=instance.id)
+        .order_by(Site.id)
+        .all()
+    )
+    site_ids = [site.id for site in sites]
+
+    site_peers = (
+        Peer.query.filter(Peer.site_id.in_(site_ids)).all()
+        if site_ids
+        else []
+    )
+
+    for peer in site_peers:
         state = peer_state(peer)
         rows.append({
             "key": peer.public_key,
@@ -270,7 +328,11 @@ def status_snapshot() -> dict:
             "tx": format_bytes(peer.tx_bytes),
         })
 
-    for peer in AdminPeer.query.all():
+    admin_peers = AdminPeer.query.filter_by(
+        vpn_instance_id=instance.id
+    ).all()
+
+    for peer in admin_peers:
         state = peer_state(peer)
         rows.append({
             "key": peer.public_key,
@@ -304,13 +366,21 @@ def status_snapshot() -> dict:
         "total": len(rows),
     }
 
-    sites = {}
-    for site in Site.query.order_by(Site.id).all():
-        sites[str(site.id)] = site_status_counts(site)
-
     return {
+        "instance": {
+            "id": instance.id,
+            "name": instance.name,
+            "interface_name": instance.interface_name,
+            "endpoint": instance.endpoint,
+            "listen_port": instance.listen_port,
+            "vpn_pool": instance.vpn_pool,
+            "server_address": instance.server_address,
+        },
         "health": health,
         "counts": counts,
-        "sites": sites,
+        "sites": {
+            str(site.id): site_status_counts(site)
+            for site in sites
+        },
         "peers": rows,
     }

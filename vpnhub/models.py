@@ -15,15 +15,63 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
-class Site(db.Model):
-    __tablename__ = "sites"
+class VPNInstance(db.Model):
+    __tablename__ = "vpn_instances"
+    __table_args__ = (
+        db.Index(
+            "uq_default_vpn_instance",
+            "is_default",
+            unique=True,
+            postgresql_where=db.text("is_default = true"),
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(160), unique=True, nullable=False, index=True)
-    vpn_cidr = db.Column(db.String(64), unique=True, nullable=False)
+    name = db.Column(db.String(120), unique=True, nullable=False)
+    interface_name = db.Column(db.String(32), unique=True, nullable=False)
+    endpoint = db.Column(db.String(255), nullable=False)
+    listen_port = db.Column(db.Integer, unique=True, nullable=False)
+    vpn_pool = db.Column(db.String(64), nullable=False)
+    server_address = db.Column(db.String(64), nullable=False)
+    server_public_key = db.Column(db.String(128), nullable=False)
+    private_key_path = db.Column(db.String(255), nullable=False)
+    route_protocol = db.Column(db.Integer, nullable=False, default=186)
+    enabled = db.Column(db.Boolean, default=True, nullable=False)
+    is_default = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    sites = db.relationship("Site", back_populates="vpn_instance")
+    admin_peers = db.relationship("AdminPeer", back_populates="vpn_instance")
+
+
+class Site(db.Model):
+    __tablename__ = "sites"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "vpn_instance_id",
+            "name",
+            name="uq_site_name_per_instance",
+        ),
+        db.UniqueConstraint(
+            "vpn_instance_id",
+            "vpn_cidr",
+            name="uq_site_cidr_per_instance",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    vpn_instance_id = db.Column(
+        db.Integer,
+        db.ForeignKey("vpn_instances.id"),
+        nullable=False,
+        index=True,
+    )
+    name = db.Column(db.String(160), nullable=False, index=True)
+    vpn_cidr = db.Column(db.String(64), nullable=False)
     enabled = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    vpn_instance = db.relationship("VPNInstance", back_populates="sites")
     networks = db.relationship(
         "Network",
         back_populates="site",
@@ -66,6 +114,11 @@ class Peer(db.Model):
                 "peer_type = 'gateway' AND enabled = true"
             ),
         ),
+        db.UniqueConstraint(
+            "site_id",
+            "assigned_ip",
+            name="uq_peer_ip_per_site",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -81,7 +134,7 @@ class Peer(db.Model):
 
     public_key = db.Column(db.String(128), unique=True, nullable=False, index=True)
     preshared_key_enc = db.Column(db.Text, nullable=True)
-    assigned_ip = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    assigned_ip = db.Column(db.String(64), nullable=False, index=True)
 
     enabled = db.Column(db.Boolean, default=True, nullable=False)
 
@@ -97,13 +150,26 @@ class Peer(db.Model):
 
 class AdminPeer(db.Model):
     __tablename__ = "admin_peers"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "vpn_instance_id",
+            "assigned_ip",
+            name="uq_admin_peer_ip_per_instance",
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
+    vpn_instance_id = db.Column(
+        db.Integer,
+        db.ForeignKey("vpn_instances.id"),
+        nullable=False,
+        index=True,
+    )
     name = db.Column(db.String(160), nullable=False)
 
     public_key = db.Column(db.String(128), unique=True, nullable=False, index=True)
     preshared_key_enc = db.Column(db.Text, nullable=True)
-    assigned_ip = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    assigned_ip = db.Column(db.String(64), nullable=False, index=True)
 
     enabled = db.Column(db.Boolean, default=True, nullable=False)
 
@@ -113,3 +179,5 @@ class AdminPeer(db.Model):
     tx_bytes = db.Column(db.BigInteger, default=0, nullable=False)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    vpn_instance = db.relationship("VPNInstance", back_populates="admin_peers")

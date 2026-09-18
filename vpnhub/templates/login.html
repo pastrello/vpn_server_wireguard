@@ -4,9 +4,23 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>VPNHub · Login</title>
+    <script>
+    (function () {
+        try {
+            const saved = localStorage.getItem("vpnhub-theme");
+            const prefersDark = window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches;
+            document.documentElement.dataset.theme =
+                saved || (prefersDark ? "dark" : "light");
+        } catch (_) {
+            document.documentElement.dataset.theme = "light";
+        }
+    })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body class="login-page">
+<button class="login-theme-toggle" type="button" data-theme-toggle aria-label="Alternar tema"><span data-theme-icon>◐</span></button>
 <div class="login-panel">
     <div class="login-brand">
         <span class="brand-mark large">V</span>
@@ -44,5 +58,6 @@
         Administração centralizada de Sites e Peers WireGuard.
     </p>
 </div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

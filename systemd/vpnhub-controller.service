@@ -12,11 +12,12 @@ EnvironmentFile=/etc/vpnhub/vpnhub.env
 ExecStart=/opt/vpnhub/venv/bin/python /opt/vpnhub/controller/vpnhub-controller.py
 Restart=on-failure
 RestartSec=3
+UMask=0077
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes
-ProtectSystem=full
-ReadWritePaths=/run/vpnhub /etc/wireguard /etc/sysctl.d /etc/firewalld
+ProtectSystem=strict
+ReadWritePaths=/run /etc/wireguard /etc/sysctl.d /etc/firewalld
 
 [Install]
 WantedBy=multi-user.target

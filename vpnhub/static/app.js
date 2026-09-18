@@ -1,3 +1,38 @@
+function vpnhubTheme() {
+    return document.documentElement.dataset.theme || "light";
+}
+
+function updateThemeControls() {
+    const dark = vpnhubTheme() === "dark";
+    document.querySelectorAll("[data-theme-icon]").forEach((node) => {
+        node.textContent = dark ? "☀" : "☾";
+    });
+    document.querySelectorAll("[data-theme-label]").forEach((node) => {
+        node.textContent = dark ? "Tema claro" : "Tema escuro";
+    });
+}
+
+function setVpnhubTheme(theme) {
+    const normalized = theme === "dark" ? "dark" : "light";
+    document.documentElement.dataset.theme = normalized;
+    try {
+        localStorage.setItem("vpnhub-theme", normalized);
+    } catch (_) {
+        // localStorage may be disabled; theme still applies for this page.
+    }
+    updateThemeControls();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    updateThemeControls();
+
+    document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+        button.addEventListener("click", () => {
+            setVpnhubTheme(vpnhubTheme() === "dark" ? "light" : "dark");
+        });
+    });
+});
+
 document.addEventListener("submit", (event) => {
     const form = event.target;
     const message = form.dataset.confirm;

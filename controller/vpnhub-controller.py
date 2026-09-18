@@ -5,8 +5,10 @@ import base64
 import ipaddress
 import json
 import os
+import pwd
 import shutil
 import socket
+import struct
 import subprocess
 import tempfile
 from pathlib import Path
@@ -17,11 +19,16 @@ SOCKET_PATH = os.getenv(
 )
 DRY_RUN = os.getenv("WG_DRY_RUN", "true").lower() == "true"
 DEFAULT_INTERFACE = os.getenv("WG_INTERFACE", "wg0")
+DEFAULT_LISTEN_PORT = int(os.getenv("WG_LISTEN_PORT", "51820"))
+DEFAULT_SERVER_ADDRESS = os.getenv("WG_SERVER_ADDRESS", "10.250.0.1/16")
+DEFAULT_VPN_POOL = os.getenv("VPN_ADDRESS_POOL", "10.250.0.0/16")
 DEFAULT_PRIVATE_KEY = os.getenv(
     "WG_SERVER_PRIVATE_KEY_PATH",
     "/etc/wireguard/vpnhub-server.key",
 )
 DEFAULT_ROUTE_PROTOCOL = int(os.getenv("WG_ROUTE_PROTOCOL", "186"))
+CONTROLLER_ALLOWED_USER = os.getenv("CONTROLLER_ALLOWED_USER", "vpnhub")
+MAX_PAYLOAD_BYTES = 1024 * 1024
 
 
 class ControllerFailure(RuntimeError):
@@ -66,21 +73,55 @@ def _validate_wg_key(value: str, label: str):
         raise ControllerFailure(f"{label} deve representar 32 bytes.")
 
 
+def _require_runtime_value(label, supplied, expected):
+    if supplied != expected:
+        raise ControllerFailure(
+            f"{label} não pertence à configuração autorizada do controller."
+        )
+
+
 def validate_state(payload: dict) -> dict:
-    interface = str(payload.get("interface") or DEFAULT_INTERFACE)
+    interface = str(payload.get("interface") or "")
+    listen_port = int(payload.get("listen_port") or 0)
+    server_address = str(payload.get("server_address") or "")
+    vpn_pool_value = str(payload.get("vpn_pool") or "")
+    private_key_path = str(payload.get("private_key_path") or "")
+    route_protocol = int(payload.get("route_protocol") or 0)
 
-    if not interface.replace("_", "").replace("-", "").isalnum():
-        raise ControllerFailure("Nome de interface inválido.")
-
-    listen_port = int(payload.get("listen_port") or 51820)
-    if not 1 <= listen_port <= 65535:
-        raise ControllerFailure("Porta WireGuard inválida.")
-
-    server_iface = ipaddress.ip_interface(
-        str(payload.get("server_address") or "10.250.0.1/16")
+    _require_runtime_value(
+        "Interface WireGuard",
+        interface,
+        DEFAULT_INTERFACE,
     )
+    _require_runtime_value(
+        "Porta WireGuard",
+        listen_port,
+        DEFAULT_LISTEN_PORT,
+    )
+    _require_runtime_value(
+        "Endereço do servidor",
+        server_address,
+        DEFAULT_SERVER_ADDRESS,
+    )
+    _require_runtime_value(
+        "VPN pool",
+        vpn_pool_value,
+        DEFAULT_VPN_POOL,
+    )
+    _require_runtime_value(
+        "Caminho da PrivateKey",
+        private_key_path,
+        DEFAULT_PRIVATE_KEY,
+    )
+    _require_runtime_value(
+        "Routing protocol",
+        route_protocol,
+        DEFAULT_ROUTE_PROTOCOL,
+    )
+
+    server_iface = ipaddress.ip_interface(server_address)
     vpn_pool = ipaddress.ip_network(
-        str(payload.get("vpn_pool") or server_iface.network),
+        vpn_pool_value,
         strict=False,
     )
 
@@ -88,12 +129,6 @@ def validate_state(payload: dict) -> dict:
         raise ControllerFailure(
             "WG_SERVER_ADDRESS/VPN_ADDRESS_POOL inválidos."
         )
-
-    route_protocol = int(
-        payload.get("route_protocol") or DEFAULT_ROUTE_PROTOCOL
-    )
-    if not 1 <= route_protocol <= 255:
-        raise ControllerFailure("WG_ROUTE_PROTOCOL inválido.")
 
     peers = []
     public_keys = set()
@@ -166,9 +201,7 @@ def validate_state(payload: dict) -> dict:
         "listen_port": listen_port,
         "server_address": str(server_iface),
         "vpn_pool": str(vpn_pool),
-        "private_key_path": str(
-            payload.get("private_key_path") or DEFAULT_PRIVATE_KEY
-        ),
+        "private_key_path": DEFAULT_PRIVATE_KEY,
         "route_protocol": route_protocol,
         "peers": peers,
         "sites": sites,
@@ -883,6 +916,66 @@ def handle(req: dict) -> dict:
     }
 
 
+def _authorized_uids():
+    allowed = {0}
+
+    try:
+        allowed.add(pwd.getpwnam(CONTROLLER_ALLOWED_USER).pw_uid)
+    except KeyError as exc:
+        raise ControllerFailure(
+            f"Usuário autorizado do controller não existe: "
+            f"{CONTROLLER_ALLOWED_USER}"
+        ) from exc
+
+    return allowed
+
+
+def _peer_uid(conn: socket.socket) -> int:
+    size = struct.calcsize("3i")
+    credentials = conn.getsockopt(
+        socket.SOL_SOCKET,
+        socket.SO_PEERCRED,
+        size,
+    )
+    _pid, uid, _gid = struct.unpack("3i", credentials)
+    return uid
+
+
+def _handle_connection(conn: socket.socket, allowed_uids: set[int]):
+    try:
+        uid = _peer_uid(conn)
+        if uid not in allowed_uids:
+            raise ControllerFailure(
+                f"UID {uid} não autorizado no controller."
+            )
+
+        data = b""
+
+        while not data.endswith(b"\\n"):
+            chunk = conn.recv(65536)
+            if not chunk:
+                break
+
+            data += chunk
+
+            if len(data) > MAX_PAYLOAD_BYTES:
+                raise ControllerFailure(
+                    "Payload do controller excedeu o limite de 1 MiB."
+                )
+
+        if not data:
+            raise ControllerFailure("Requisição vazia.")
+
+        request = json.loads(data.decode("utf-8"))
+        return handle(request)
+
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+        }
+
+
 def main():
     path = Path(SOCKET_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -892,8 +985,12 @@ def main():
     except FileNotFoundError:
         pass
 
+    allowed_uids = _authorized_uids()
+    service_user = pwd.getpwnam(CONTROLLER_ALLOWED_USER)
+
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(SOCKET_PATH)
+    os.chown(SOCKET_PATH, 0, service_user.pw_gid)
     os.chmod(SOCKET_PATH, 0o660)
     server.listen(32)
 
@@ -901,32 +998,9 @@ def main():
         conn, _ = server.accept()
 
         with conn:
-            data = b""
-
-            while not data.endswith(b"\n"):
-                chunk = conn.recv(65536)
-                if not chunk:
-                    break
-
-                data += chunk
-
-                if len(data) > 4 * 1024 * 1024:
-                    raise ControllerFailure(
-                        "Payload do controller excedeu o limite."
-                    )
-
-            try:
-                resp = handle(
-                    json.loads(data.decode("utf-8"))
-                )
-            except Exception as exc:
-                resp = {
-                    "ok": False,
-                    "error": str(exc),
-                }
-
+            response = _handle_connection(conn, allowed_uids)
             conn.sendall(
-                (json.dumps(resp) + "\n").encode("utf-8")
+                (json.dumps(response) + "\\n").encode("utf-8")
             )
 
 

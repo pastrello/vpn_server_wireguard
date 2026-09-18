@@ -1,8 +1,6 @@
 import ipaddress
 import subprocess
 
-from flask import current_app
-
 from .models import Site
 
 
@@ -30,31 +28,34 @@ def generate_psk():
     return _run_wg(["genpsk"])
 
 
-def _server_public_key():
-    key = current_app.config["VPN_SERVER_PUBLIC_KEY"].strip()
+def _server_public_key(instance):
+    key = instance.server_public_key.strip()
+
     if not key or key == "CHANGE_ME" or key.startswith("COLOQUE_"):
         raise RuntimeError(
-            "VPN_SERVER_PUBLIC_KEY ainda não foi configurada. "
-            "Execute scripts/bootstrap-wireguard.sh."
+            "PublicKey da VPN Instance ainda não foi configurada. "
+            "Execute scripts/bootstrap-wireguard.sh e "
+            "scripts/sync-default-instance.py."
         )
+
     return key
 
 
-def _server_tunnel_ip():
-    address = ipaddress.ip_interface(
-        current_app.config["WG_SERVER_ADDRESS"]
-    )
+def _server_tunnel_ip(instance):
+    address = ipaddress.ip_interface(instance.server_address)
     return f"{address.ip}/32"
 
 
 def render_site_peer_config(peer, private_key, preshared_key):
+    instance = peer.site.vpn_instance
+
     if peer.peer_type == "gateway":
-        allowed = [current_app.config["VPN_ADDRESS_POOL"]]
+        allowed = [instance.vpn_pool]
     else:
         allowed = [peer.site.vpn_cidr]
         allowed.extend(
-            n.translated_cidr or n.cidr
-            for n in peer.site.networks
+            network.translated_cidr or network.cidr
+            for network in peer.site.networks
         )
 
     return f"""[Interface]
@@ -62,27 +63,31 @@ PrivateKey = {private_key}
 Address = {peer.assigned_ip}
 
 [Peer]
-PublicKey = {_server_public_key()}
+PublicKey = {_server_public_key(instance)}
 PresharedKey = {preshared_key}
-Endpoint = {current_app.config['VPN_ENDPOINT']}
+Endpoint = {instance.endpoint}
 AllowedIPs = {', '.join(allowed)}
 PersistentKeepalive = 25
 """
 
 
 def render_admin_peer_config(peer, private_key, preshared_key):
-    allowed = [_server_tunnel_ip()]
+    instance = peer.vpn_instance
+    allowed = [_server_tunnel_ip(instance)]
 
     for site in (
         Site.query
-        .filter_by(enabled=True)
+        .filter_by(
+            enabled=True,
+            vpn_instance_id=instance.id,
+        )
         .order_by(Site.id)
         .all()
     ):
         allowed.append(site.vpn_cidr)
         allowed.extend(
-            n.translated_cidr or n.cidr
-            for n in site.networks
+            network.translated_cidr or network.cidr
+            for network in site.networks
         )
 
     allowed = list(dict.fromkeys(allowed))
@@ -92,9 +97,9 @@ PrivateKey = {private_key}
 Address = {peer.assigned_ip}
 
 [Peer]
-PublicKey = {_server_public_key()}
+PublicKey = {_server_public_key(instance)}
 PresharedKey = {preshared_key}
-Endpoint = {current_app.config['VPN_ENDPOINT']}
+Endpoint = {instance.endpoint}
 AllowedIPs = {', '.join(allowed)}
 PersistentKeepalive = 25
 """

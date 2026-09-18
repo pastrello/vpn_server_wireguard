@@ -4,6 +4,19 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{% block title %}VPNHub{% endblock %}</title>
+    <script>
+    (function () {
+        try {
+            const saved = localStorage.getItem("vpnhub-theme");
+            const prefersDark = window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches;
+            document.documentElement.dataset.theme =
+                saved || (prefersDark ? "dark" : "light");
+        } catch (_) {
+            document.documentElement.dataset.theme = "light";
+        }
+    })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
@@ -30,10 +43,14 @@
             <a href="{{ url_for('main.admin_peer_new') }}">
                 <span class="nav-icon">◆</span> Admin Peer
             </a>
+            <button class="nav-theme-button" type="button" data-theme-toggle>
+                <span class="nav-icon" data-theme-icon>◐</span>
+                <span data-theme-label>Tema</span>
+            </button>
         </nav>
 
         <div class="sidebar-footer">
-            <span class="environment-badge">v0.4</span>
+            <span class="environment-badge">v0.5</span>
             <form method="post" action="{{ url_for('auth.logout') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="link-button" type="submit">Sair</button>

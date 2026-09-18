@@ -23,7 +23,7 @@
     <span class="status-dot"></span>
     <strong>
       {% if controller.interface_up %}
-        {{ controller.interface }} ativo · UDP {{ controller.listen_port or '?' }}
+        {{ instance.name }} · {{ instance.interface_name }} · {{ instance.vpn_pool }} · UDP {{ instance.listen_port }}
       {% else %}
         WireGuard não ativo
       {% endif %}

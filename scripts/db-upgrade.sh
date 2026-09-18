@@ -4,7 +4,10 @@ set -Eeuo pipefail
 APP_DIR="/opt/vpnhub"
 ENV_FILE="/etc/vpnhub/vpnhub.env"
 
-[[ -f "${ENV_FILE}" ]] || { echo "Arquivo ${ENV_FILE} não existe."; exit 1; }
+[[ -f "${ENV_FILE}" ]] || {
+    echo "Arquivo ${ENV_FILE} não existe."
+    exit 1
+}
 
 cd "${APP_DIR}"
 set -a
@@ -12,4 +15,5 @@ set -a
 source "${ENV_FILE}"
 set +a
 
-exec "${APP_DIR}/venv/bin/flask" --app run:app db upgrade
+"${APP_DIR}/venv/bin/flask" --app run:app db upgrade
+"${APP_DIR}/venv/bin/python"     "${APP_DIR}/scripts/sync-default-instance.py"

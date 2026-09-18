@@ -18,6 +18,7 @@ from flask_login import login_required
 
 from .crypto import encrypt_psk
 from .ephemeral import read_config, store_config
+from .instances import default_instance
 from .ipam import allocate_admin_ip, allocate_peer_ip, allocate_site_cidr
 from .models import AdminPeer, Network, Peer, Site, db
 from .sync import (
@@ -87,13 +88,24 @@ def _commit_with_reconcile(success_message: str):
 @login_required
 def dashboard():
     snapshot = status_snapshot()
-    sites = Site.query.order_by(Site.name).all()
-    admins = AdminPeer.query.order_by(AdminPeer.name).all()
+    instance = default_instance()
+    sites = (
+        Site.query
+        .filter_by(vpn_instance_id=instance.id)
+        .order_by(Site.name)
+        .all()
+    )
+    admins = (
+        AdminPeer.query
+        .filter_by(vpn_instance_id=instance.id)
+        .order_by(AdminPeer.name)
+        .all()
+    )
 
     stats = {
         "sites": len(sites),
-        "networks": Network.query.count(),
-        "peers": Peer.query.count() + len(admins),
+        "networks": sum(len(site.networks) for site in sites),
+        "peers": sum(len(site.peers) for site in sites) + len(admins),
         **snapshot["counts"],
     }
 
@@ -109,6 +121,7 @@ def dashboard():
         stats=stats,
         site_counts=site_counts,
         controller=snapshot["health"],
+        instance=instance,
     )
 
 
@@ -151,13 +164,22 @@ def site_new():
             flash("Informe o nome do Site.", "danger")
             return redirect(url_for("main.site_new"))
 
-        if Site.query.filter_by(name=name).first():
-            flash("Já existe um Site com esse nome.", "danger")
+        instance = default_instance()
+
+        if Site.query.filter_by(
+            vpn_instance_id=instance.id,
+            name=name,
+        ).first():
+            flash(
+                "Já existe um Site com esse nome nesta VPN Instance.",
+                "danger",
+            )
             return redirect(url_for("main.site_new"))
 
         site = Site(
+            vpn_instance_id=instance.id,
             name=name,
-            vpn_cidr=allocate_site_cidr(),
+            vpn_cidr=allocate_site_cidr(instance),
         )
         db.session.add(site)
 
@@ -479,11 +501,13 @@ def admin_peer_new():
             private_key, public_key = generate_keypair()
             preshared_key = generate_psk()
 
+            instance = default_instance()
             peer = AdminPeer(
+                vpn_instance_id=instance.id,
                 name=name,
                 public_key=public_key,
                 preshared_key_enc=encrypt_psk(preshared_key),
-                assigned_ip=allocate_admin_ip(),
+                assigned_ip=allocate_admin_ip(instance),
             )
             db.session.add(peer)
             db.session.flush()
