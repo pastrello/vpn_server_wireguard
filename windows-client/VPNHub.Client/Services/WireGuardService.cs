@@ -73,6 +73,10 @@ public sealed partial class WireGuardService
                 TimeSpan.FromSeconds(15),
                 cancellationToken);
 
+            await SetManualStartAsync(
+                tunnelName,
+                cancellationToken);
+
             if (!await DeletePlaintextAsync(
                     configPath,
                     runtimeDirectory,
@@ -240,6 +244,54 @@ public sealed partial class WireGuardService
 
             throw new InvalidOperationException(
                 $"WireGuard retornou código {process.ExitCode}" +
+                (detail.Length > 0 ? $": {detail}" : "."));
+        }
+    }
+
+    private static async Task SetManualStartAsync(
+        string tunnelName,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.System),
+                "sc.exe"),
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+
+        startInfo.ArgumentList.Add("config");
+        startInfo.ArgumentList.Add(ServiceName(tunnelName));
+        startInfo.ArgumentList.Add("start=");
+        startInfo.ArgumentList.Add("demand");
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException(
+                "Não foi possível ajustar o tunnel service.");
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(
+            cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(
+            cancellationToken);
+
+        await process.WaitForExitAsync(cancellationToken);
+
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+
+        if (process.ExitCode != 0)
+        {
+            var detail = string.Join(
+                " ",
+                new[] { stderr.Trim(), stdout.Trim() }
+                    .Where(value => value.Length > 0));
+
+            throw new InvalidOperationException(
+                "Não foi possível definir o tunnel service como Manual" +
                 (detail.Length > 0 ? $": {detail}" : "."));
         }
     }

@@ -18,6 +18,7 @@ public sealed class MainForm : Form
     private readonly Button _disconnect = new();
     private readonly Button _delete = new();
     private readonly System.Windows.Forms.Timer _timer = new();
+    private bool _allowClose;
 
     public MainForm()
     {
@@ -32,6 +33,7 @@ public sealed class MainForm : Form
         _timer.Interval = 1500;
         _timer.Tick += (_, _) => RefreshState();
         _timer.Start();
+        FormClosing += MainForm_FormClosing;
         FormClosed += (_, _) => _timer.Dispose();
     }
 
@@ -164,6 +166,62 @@ public sealed class MainForm : Form
         };
 
         UpdateButtons();
+    }
+
+    private async void MainForm_FormClosing(
+        object? sender,
+        FormClosingEventArgs e)
+    {
+        if (_allowClose)
+        {
+            return;
+        }
+
+        var connected = _store.List()
+            .Where(profile =>
+                _wireGuard.GetState(profile.ProfileName)
+                != TunnelState.Disconnected)
+            .ToArray();
+
+        if (connected.Length == 0)
+        {
+            _allowClose = true;
+            return;
+        }
+
+        e.Cancel = true;
+
+        var answer = MessageBox.Show(
+            this,
+            "Existem túneis VPNHub ativos. Eles serão desconectados " +
+            "antes de fechar o cliente. Continuar?",
+            "VPNHub",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (answer != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            SetBusy(true);
+
+            foreach (var profile in connected)
+            {
+                await _wireGuard.DisconnectAsync(
+                    profile.ProfileName);
+            }
+
+            _allowClose = true;
+            Close();
+        }
+        catch (Exception exc)
+        {
+            ShowError(exc);
+            SetBusy(false);
+        }
     }
 
     private async Task ImportProfileAsync()

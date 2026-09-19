@@ -129,8 +129,10 @@ dotnet test .\VPNHub.Client.Tests\VPNHub.Client.Tests.csproj -c Release
 6. Opcionalmente exclua o .conf original.
 7. Selecione o perfil, informe a senha e clique Conectar.
 8. O cliente instala WireGuardTunnel$VPNHub_<perfil>.
-9. Após o serviço ficar Running, a configuração temporária é removida.
-10. Clique Desconectar para remover o tunnel service.
+9. Após o serviço ficar Running, o cliente muda o serviço para inicialização Manual.
+10. A configuração temporária em claro é removida.
+11. Clique Desconectar para remover o tunnel service.
+12. Ao fechar o VPNHub Client, túneis ativos são desconectados após confirmação.
 
 ## Limitações da primeira candidata
 
@@ -142,8 +144,11 @@ dotnet test .\VPNHub.Client.Tests\VPNHub.Client.Tests.csproj -c Release
 - sem recuperação de senha;
 - strings gerenciadas usadas durante o import podem permanecer na memória até
   o GC; o caminho de conexão trabalha com bytes e faz zeroização best-effort;
-- se o tunnel service reiniciar sozinho após o arquivo temporário ter sido
-  removido, o usuário deve reconectar pelo VPNHub Client.
+- após uma queda abrupta do aplicativo, um tunnel service já ativo pode
+  continuar ativo até ser parado/reiniciado; ele é configurado como Manual,
+  portanto não deve iniciar automaticamente no próximo boot;
+- no próximo Connect, serviços VPNHub residuais são removidos antes da nova
+  instalação do túnel.
 
 Esses limites são intencionais. Primeiro queremos validar o modelo
 senha -> identidade cifrada -> WireGuard oficial.
