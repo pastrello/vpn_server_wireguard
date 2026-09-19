@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  server:
     runs-on: ubuntu-latest
 
     steps:
@@ -44,3 +44,34 @@ jobs:
           VPN_SERVER_PUBLIC_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
           WG_DRY_RUN: "true"
         run: pytest -q
+
+  windows-client:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore client
+        run: dotnet restore windows-client/VPNHub.Client/VPNHub.Client.csproj
+
+      - name: Build client
+        run: dotnet build windows-client/VPNHub.Client/VPNHub.Client.csproj -c Release --no-restore
+
+      - name: Test client core
+        run: dotnet test windows-client/VPNHub.Client.Tests/VPNHub.Client.Tests.csproj -c Release
+
+      - name: Publish win-x64
+        run: dotnet publish windows-client/VPNHub.Client/VPNHub.Client.csproj -c Release -r win-x64 --self-contained false -o windows-client/artifacts/win-x64
+
+      - name: Upload Windows client artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VPNHub.Client-win-x64
+          path: windows-client/artifacts/win-x64/
+          if-no-files-found: error
