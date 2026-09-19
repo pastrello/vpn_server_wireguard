@@ -11,6 +11,7 @@ public sealed partial class WireGuardService
     public WireGuardService()
     {
         _wireGuardExe = FindWireGuardExecutable();
+        CleanupRuntimeDirectory();
     }
 
     public bool IsWireGuardInstalled =>
@@ -309,6 +310,36 @@ public sealed partial class WireGuardService
         catch
         {
             // Best-effort cleanup after an already-failed operation.
+        }
+    }
+
+    private static void CleanupRuntimeDirectory()
+    {
+        var runtimeRoot = Path.Combine(
+            Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData),
+            "VPNHub",
+            "Runtime");
+
+        if (!Directory.Exists(runtimeRoot))
+        {
+            return;
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(
+                     runtimeRoot,
+                     "*",
+                     SearchOption.TopDirectoryOnly))
+        {
+            TryDeleteDirectory(directory);
+        }
+
+        foreach (var file in Directory.EnumerateFiles(
+                     runtimeRoot,
+                     "*",
+                     SearchOption.TopDirectoryOnly))
+        {
+            TryDelete(file);
         }
     }
 
