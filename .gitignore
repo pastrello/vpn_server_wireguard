@@ -21,3 +21,11 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+
+# .NET / Windows Client
+**/bin/
+**/obj/
+*.user
+*.suo
+*.nupkg
+*.snupkg
