@@ -64,11 +64,11 @@ public sealed class PasswordDialog : Form
 
         ok.Click += (_, _) =>
         {
-            if (_password.Text.Length < 8)
+            if (_password.Text.Length < 12)
             {
                 MessageBox.Show(
                     this,
-                    "Use uma senha com pelo menos 8 caracteres.",
+                    "Use uma senha com pelo menos 12 caracteres.",
                     "VPNHub",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);

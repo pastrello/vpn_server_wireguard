@@ -32,6 +32,7 @@ public sealed class MainForm : Form
         _timer.Interval = 1500;
         _timer.Tick += (_, _) => RefreshState();
         _timer.Start();
+        FormClosed += (_, _) => _timer.Dispose();
     }
 
     private void BuildUi()
@@ -203,11 +204,32 @@ public sealed class MainForm : Form
                 config,
                 passwordDialog.Password);
 
-            var existing = _store.List().FirstOrDefault(
+            var currentProfiles = _store.List();
+            var existing = currentProfiles.FirstOrDefault(
                 profile => string.Equals(
                     profile.ProfileName,
                     profileName,
                     StringComparison.OrdinalIgnoreCase));
+
+            var tunnelName = WireGuardService.TunnelName(profileName);
+            var tunnelCollision = currentProfiles.FirstOrDefault(
+                profile =>
+                    !string.Equals(
+                        profile.ProfileName,
+                        profileName,
+                        StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(
+                        WireGuardService.TunnelName(profile.ProfileName),
+                        tunnelName,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (tunnelCollision is not null)
+            {
+                throw new InvalidDataException(
+                    $"O nome \"{profileName}\" gera o mesmo tunnel service " +
+                    $"do perfil \"{tunnelCollision.ProfileName}\". " +
+                    "Use outro nome para o arquivo .conf.");
+            }
 
             if (existing is not null)
             {

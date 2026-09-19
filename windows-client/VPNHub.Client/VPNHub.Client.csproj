@@ -9,6 +9,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>VPNHub.Client</AssemblyName>
     <RootNamespace>VPNHub.Client</RootNamespace>
+    <Version>0.7.0-preview.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
