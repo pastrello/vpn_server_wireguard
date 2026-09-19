@@ -16,11 +16,12 @@ from flask import (
 )
 from flask_login import login_required
 
+from .controller_client import ControllerError, controller_request
 from .crypto import encrypt_psk
 from .ephemeral import read_config, store_config
-from .instances import default_instance
+from .instances import all_instances, selected_instance
 from .ipam import allocate_admin_ip, allocate_peer_ip, allocate_site_cidr
-from .models import AdminPeer, Network, Peer, Site, db
+from .models import AdminPeer, Network, Peer, Site, VPNInstance, db
 from .sync import (
     reconcile,
     site_status_counts,
@@ -87,8 +88,8 @@ def _commit_with_reconcile(success_message: str):
 @bp.route("/")
 @login_required
 def dashboard():
-    snapshot = status_snapshot()
-    instance = default_instance()
+    instance = selected_instance()
+    snapshot = status_snapshot(instance)
     sites = (
         Site.query
         .filter_by(vpn_instance_id=instance.id)
@@ -101,27 +102,25 @@ def dashboard():
         .order_by(AdminPeer.name)
         .all()
     )
-
     stats = {
         "sites": len(sites),
         "networks": sum(len(site.networks) for site in sites),
         "peers": sum(len(site.peers) for site in sites) + len(admins),
         **snapshot["counts"],
     }
-
     site_counts = {
         site.id: site_status_counts(site)
         for site in sites
     }
-
     return render_template(
         "dashboard.html",
         sites=sites,
         admins=admins,
         stats=stats,
         site_counts=site_counts,
-        controller=snapshot["health"],
+        controller=snapshot["instance_health"] or {},
         instance=instance,
+        instances=all_instances(),
     )
 
 
@@ -137,7 +136,187 @@ def status_page():
 @bp.route("/status/data")
 @login_required
 def status_data():
+    instance_id = request.args.get(
+        "instance_id",
+        type=int,
+    )
+    if instance_id is not None:
+        instance = db.get_or_404(
+            VPNInstance,
+            instance_id,
+        )
+        return jsonify(status_snapshot(instance))
     return jsonify(status_snapshot())
+
+
+@bp.route("/instances")
+@login_required
+def instance_list():
+    snapshot = status_snapshot()
+    return render_template(
+        "instances.html",
+        instances=snapshot["instances"],
+    )
+
+
+@bp.route(
+    "/instances/<int:instance_id>/select",
+    methods=["POST"],
+)
+@login_required
+def instance_select(instance_id):
+    instance = db.get_or_404(
+        VPNInstance,
+        instance_id,
+    )
+    session["vpn_instance_id"] = instance.id
+    return redirect(url_for("main.dashboard"))
+
+
+@bp.route("/instances/new", methods=["GET", "POST"])
+@login_required
+def instance_new():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        endpoint = request.form.get(
+            "endpoint",
+            "",
+        ).strip()
+        pool_text = request.form.get(
+            "vpn_pool",
+            "",
+        ).strip()
+        port_text = request.form.get(
+            "listen_port",
+            "",
+        ).strip()
+
+        if not all((name, endpoint, pool_text, port_text)):
+            flash(
+                "Nome, endpoint, VPN pool e porta UDP são obrigatórios.",
+                "danger",
+            )
+            return redirect(url_for("main.instance_new"))
+
+        if VPNInstance.query.filter_by(name=name).first():
+            flash(
+                "Já existe uma VPN Instance com esse nome.",
+                "danger",
+            )
+            return redirect(url_for("main.instance_new"))
+
+        try:
+            listen_port = int(port_text)
+            if not 1 <= listen_port <= 65535:
+                raise ValueError
+
+            vpn_pool = ipaddress.ip_network(
+                pool_text,
+                strict=False,
+            )
+            if (
+                vpn_pool.version != 4
+                or vpn_pool.prefixlen > 24
+            ):
+                raise ValueError
+
+            server_ip = next(vpn_pool.hosts())
+            server_address = (
+                f"{server_ip}/{vpn_pool.prefixlen}"
+            )
+        except (ValueError, StopIteration):
+            flash(
+                "VPN pool/porta inválidos. Use IPv4 com espaço para /24.",
+                "danger",
+            )
+            return redirect(url_for("main.instance_new"))
+
+        for current in VPNInstance.query.all():
+            current_pool = ipaddress.ip_network(
+                current.vpn_pool,
+                strict=False,
+            )
+            if vpn_pool.overlaps(current_pool):
+                flash(
+                    f"O pool {vpn_pool} conflita com "
+                    f"{current.interface_name}={current_pool}.",
+                    "danger",
+                )
+                return redirect(url_for("main.instance_new"))
+            if current.listen_port == listen_port:
+                flash(
+                    f"A porta UDP {listen_port} já pertence a "
+                    f"{current.interface_name}.",
+                    "danger",
+                )
+                return redirect(url_for("main.instance_new"))
+
+        provisioned = None
+        try:
+            provisioned = controller_request(
+                "provision_instance",
+                {
+                    "listen_port": listen_port,
+                    "vpn_pool": str(vpn_pool),
+                    "server_address": server_address,
+                },
+            )
+            instance = VPNInstance(
+                name=name,
+                interface_name=provisioned["interface"],
+                endpoint=endpoint,
+                listen_port=provisioned["listen_port"],
+                vpn_pool=provisioned["vpn_pool"],
+                server_address=provisioned["server_address"],
+                server_public_key=provisioned["public_key"],
+                private_key_path=provisioned["private_key_path"],
+                route_protocol=provisioned["route_protocol"],
+                enabled=True,
+                is_default=False,
+            )
+            db.session.add(instance)
+            db.session.flush()
+            result = reconcile()
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            if provisioned and provisioned.get("created"):
+                try:
+                    controller_request(
+                        "unprovision_instance",
+                        {
+                            "interface": provisioned["interface"],
+                        },
+                    )
+                except ControllerError:
+                    pass
+            flash(
+                f"Não foi possível criar o trunk WireGuard: {exc}",
+                "danger",
+            )
+            return redirect(url_for("main.instance_new"))
+
+        session["vpn_instance_id"] = instance.id
+        flash(
+            f"Trunk {instance.name} criado em "
+            f"{instance.interface_name} / UDP {instance.listen_port}.",
+            "success",
+        )
+        _flash_reconcile_result(result)
+        return redirect(url_for("main.dashboard"))
+
+    used_ports = {
+        item.listen_port
+        for item in VPNInstance.query.all()
+    }
+    suggested_port = 51820
+    while suggested_port in used_ports:
+        suggested_port += 1
+
+    return render_template(
+        "instance_new.html",
+        suggested_port=suggested_port,
+    )
 
 
 @bp.route("/system/reconcile", methods=["POST"])
@@ -164,7 +343,7 @@ def site_new():
             flash("Informe o nome do Site.", "danger")
             return redirect(url_for("main.site_new"))
 
-        instance = default_instance()
+        instance = selected_instance()
 
         if Site.query.filter_by(
             vpn_instance_id=instance.id,
@@ -190,14 +369,18 @@ def site_new():
                 url_for("main.site_detail", site_id=site.id)
             )
 
-    return render_template("site_new.html")
+    return render_template(
+        "site_new.html",
+        instance=selected_instance(),
+    )
 
 
 @bp.route("/sites/<int:site_id>")
 @login_required
 def site_detail(site_id):
-    status_snapshot()
     site = db.get_or_404(Site, site_id)
+    session["vpn_instance_id"] = site.vpn_instance_id
+    status_snapshot(site.vpn_instance)
     return render_template("site_detail.html", site=site)
 
 
@@ -229,10 +412,25 @@ def network_new(site_id):
         )
 
     if new_net.version != 4:
-        flash("A v0.4 aceita apenas IPv4 nas Networks.", "danger")
+        flash("A v0.6 aceita apenas IPv4 nas Networks.", "danger")
         return redirect(
             url_for("main.site_detail", site_id=site.id)
         )
+
+    for instance in VPNInstance.query.all():
+        overlay = ipaddress.ip_network(
+            instance.vpn_pool,
+            strict=False,
+        )
+        if new_net.overlaps(overlay):
+            flash(
+                f"A rede {new_net} conflita com o VPN pool "
+                f"{instance.interface_name}={overlay}.",
+                "danger",
+            )
+            return redirect(
+                url_for("main.site_detail", site_id=site.id)
+            )
 
     for row in Network.query.all():
         old_net = ipaddress.ip_network(row.cidr, strict=False)
@@ -263,7 +461,12 @@ def network_new(site_id):
     changed = _commit_with_reconcile(
         f"Network {row.cidr} adicionada."
     )
-    if changed and AdminPeer.query.count():
+    if (
+        changed
+        and AdminPeer.query.filter_by(
+            vpn_instance_id=site.vpn_instance_id
+        ).count()
+    ):
         flash(
             "Admin Peers existentes não recebem novos AllowedIPs automaticamente "
             "no cliente. Use 'Regenerar config' nos Admin Peers que precisam "
@@ -317,7 +520,7 @@ def peer_new(site_id):
             if gateway:
                 flash(
                     f"O Site já possui o Gateway ativo '{gateway.name}'. "
-                    "A v0.4 permite um Gateway ativo por Site.",
+                    "A v0.6 permite um Gateway ativo por Site.",
                     "warning",
                 )
                 return redirect(
@@ -501,7 +704,7 @@ def admin_peer_new():
             private_key, public_key = generate_keypair()
             preshared_key = generate_psk()
 
-            instance = default_instance()
+            instance = selected_instance()
             peer = AdminPeer(
                 vpn_instance_id=instance.id,
                 name=name,
@@ -540,7 +743,10 @@ def admin_peer_new():
             url_for("main.admin_peer_created", peer_id=peer.id)
         )
 
-    return render_template("admin_peer_new.html")
+    return render_template(
+        "admin_peer_new.html",
+        instance=selected_instance(),
+    )
 
 
 @bp.route("/admin-peers/<int:peer_id>/created")

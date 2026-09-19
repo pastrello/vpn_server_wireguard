@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Novo trunk · VPNHub{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <span class="eyebrow">WireGuard Instances</span>
+    <h1>Novo trunk WireGuard</h1>
+    <p>O controller escolherá automaticamente o próximo wgN e gerará uma chave exclusiva do servidor.</p>
+  </div>
+</div>
+<div class="form-card">
+  <form method="post" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Nome
+      <input name="name" placeholder="Ex.: Clientes ERP" maxlength="120" required autofocus>
+    </label>
+    <label>Endpoint público
+      <input name="endpoint" placeholder="vpn.exemplo.com.br:51821" required>
+      <small>Pode ser hostname/IP e porta pública; não precisa coincidir com a porta interna em cenários com NAT.</small>
+    </label>
+    <label>Porta UDP no servidor
+      <input name="listen_port" type="number" min="1" max="65535" value="{{ suggested_port }}" required>
+    </label>
+    <label>VPN pool
+      <input name="vpn_pool" placeholder="10.251.0.0/16" required>
+      <small>O primeiro /24 será reservado para Admin Peers; os seguintes serão alocados aos Sites.</small>
+    </label>
+    <div class="security-note">
+      <strong>Provisionamento controlado</strong>
+      <span>O portal não escolhe nome de interface nem caminho da chave. O controller root-owned criará o próximo wgN e /etc/wireguard/vpnhub-wgN.key.</span>
+    </div>
+    <div class="form-actions">
+      <a class="btn btn-light" href="{{ url_for('main.instance_list') }}">Cancelar</a>
+      <button class="btn btn-primary" type="submit">Criar trunk</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

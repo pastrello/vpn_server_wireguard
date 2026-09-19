@@ -31,6 +31,9 @@
         </a>
 
         <nav class="nav-menu">
+            <a href="{{ url_for('main.instance_list') }}">
+                <span class="nav-icon">⑂</span> Trunks WireGuard
+            </a>
             <a href="{{ url_for('main.dashboard') }}">
                 <span class="nav-icon">⌂</span> Dashboard
             </a>
@@ -50,7 +53,7 @@
         </nav>
 
         <div class="sidebar-footer">
-            <span class="environment-badge">v0.5</span>
+            <span class="environment-badge">v0.6</span>
             <form method="post" action="{{ url_for('auth.logout') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="link-button" type="submit">Sair</button>

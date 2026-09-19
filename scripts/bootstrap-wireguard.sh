@@ -56,6 +56,8 @@ grep -q '^WG_IDLE_SECONDS=' "${ENV_FILE}" || \
     printf '%s\n' 'WG_IDLE_SECONDS=600' >> "${ENV_FILE}"
 grep -q '^CONTROLLER_ALLOWED_USER=' "${ENV_FILE}" || \
     printf '%s\n' 'CONTROLLER_ALLOWED_USER=vpnhub' >> "${ENV_FILE}"
+grep -q '^CONTROLLER_REGISTRY=' "${ENV_FILE}" || \
+    printf '%s\n' 'CONTROLLER_REGISTRY=/etc/wireguard/vpnhub-instances.json' >> "${ENV_FILE}"
 
 if [[ "${ACTIVATE}" == "true" ]]; then
     set_env "WG_DRY_RUN" "false"
@@ -99,8 +101,12 @@ with psycopg.connect(url) as conn:
 raise SystemExit(0 if exists else 1)
 PY
 then
-    "${APP_DIR}/venv/bin/python"         "${APP_DIR}/scripts/sync-default-instance.py"
+    "${APP_DIR}/venv/bin/python" \
+        "${APP_DIR}/scripts/sync-default-instance.py"
 fi
+
+"${APP_DIR}/venv/bin/python" \
+    "${APP_DIR}/scripts/bootstrap-controller-registry.py"
 
 systemctl daemon-reload
 systemctl restart vpnhub-controller
